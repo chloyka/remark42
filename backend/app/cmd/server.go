@@ -642,6 +642,30 @@ func (s *ServerCommand) newServerApp(ctx context.Context) (*serverApp, error) {
 		DisableSignature:           s.DisableSignature,
 		DisableFancyTextFormatting: s.DisableFancyTextFormatting,
 		ExternalImageProxy:         s.ImageProxy.CacheExternal,
+		JWTAuthConf: api.JWTAuthConfig{
+			Secret:   s.Auth.JWT.Secret,
+			Algo:     s.Auth.JWT.Algo,
+			Header:   s.Auth.JWT.Header,
+			Issuer:   s.Auth.JWT.Issuer,
+			Audience: s.Auth.JWT.Audience,
+			Map: api.FieldMappings{
+				ID:      s.Auth.JWT.Map.ID,
+				Name:    s.Auth.JWT.Map.Name,
+				Email:   s.Auth.JWT.Map.Email,
+				Picture: s.Auth.JWT.Map.Picture,
+				Role:    s.Auth.JWT.Map.Role,
+			},
+		},
+		ForwardAuthConf: api.ForwardAuthConfig{
+			Header: s.Auth.Forward.Header,
+			Map: api.FieldMappings{
+				ID:      s.Auth.Forward.Map.ID,
+				Name:    s.Auth.Forward.Map.Name,
+				Email:   s.Auth.Forward.Map.Email,
+				Picture: s.Auth.Forward.Map.Picture,
+				Role:    s.Auth.Forward.Map.Role,
+			},
+		},
 	}
 
 	srv.ScoreThresholds.Low, srv.ScoreThresholds.Critical = s.LowScore, s.CriticalScore
@@ -933,6 +957,15 @@ func (s *ServerCommand) makeCache() (LoadingCache, error) {
 func (s *ServerCommand) addAuthProviders(authenticator *auth.Service) error {
 	providersCount := 0
 	if s.Auth.Telegram {
+		providersCount++
+	}
+
+	if s.Auth.JWT.Secret != "" {
+		log.Printf("[INFO] JWT auth enabled, header: %s, algo: %s", s.Auth.JWT.Header, s.Auth.JWT.Algo)
+		providersCount++
+	}
+	if s.Auth.Forward.Header != "" {
+		log.Printf("[INFO] forward auth enabled, header: %s", s.Auth.Forward.Header)
 		providersCount++
 	}
 

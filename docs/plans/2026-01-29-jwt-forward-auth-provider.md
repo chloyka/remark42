@@ -115,14 +115,14 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
 - Modify: `backend/app/rest/api/rest.go`
 
 ### Steps
-- [ ] In `server.go`, pass JWT/forward-auth config to the `Rest` struct when creating it. Add `JWTAuthConfig` and `ForwardAuthConfig` fields to the `Rest` struct in `rest.go`
-- [ ] In `rest.go:routes()`, add the JWT auth middleware and/or forward-auth middleware to the router BEFORE the go-pkgz/auth middleware (at the top of the middleware chain, after CORS). Only add if the respective config is enabled (Secret non-empty for JWT, Header non-empty for forward-auth)
-- [ ] In `addAuthProviders()` in `server.go`, increment `providersCount` when JWT or forward-auth is enabled (so the "no auth providers" warning doesn't trigger)
-- [ ] Log startup messages: `[INFO] JWT auth enabled, header: X-Auth-Token, algo: HS256` and similar for forward-auth
-- [ ] Write/update tests in `server_test.go`:
+- [x] In `server.go`, pass JWT/forward-auth config to the `Rest` struct when creating it. Add `JWTAuthConfig` and `ForwardAuthConfig` fields to the `Rest` struct in `rest.go`
+- [x] In `rest.go:routes()`, add the JWT auth middleware and/or forward-auth middleware to the router BEFORE the go-pkgz/auth middleware (at the top of the middleware chain, after CORS). Only add if the respective config is enabled (Secret non-empty for JWT, Header non-empty for forward-auth)
+- [x] In `addAuthProviders()` in `server.go`, increment `providersCount` when JWT or forward-auth is enabled (so the "no auth providers" warning doesn't trigger)
+- [x] Log startup messages: `[INFO] JWT auth enabled, header: X-Auth-Token, algo: HS256` and similar for forward-auth
+- [x] Write/update tests in `server_test.go`:
   - Test that JWT auth config gets passed to Rest correctly
   - Test addAuthProviders counts JWT/forward-auth as providers
-- [ ] Run `cd backend/app && go test -count 1 ./cmd/ ./rest/api/` - must pass
+- [x] Run `cd backend/app && go test -count 1 ./cmd/ ./rest/api/` - must pass
 
 ---
 

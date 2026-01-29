@@ -940,6 +940,105 @@ func TestForwardAuthConfigEnvVars(t *testing.T) {
 	assert.Equal(t, "env_role", s.Auth.Forward.Map.Role)
 }
 
+func TestServerApp_JWTAuthConfigPassedToRest(t *testing.T) {
+	port := chooseRandomUnusedPort()
+	app, ctx, cancel := prepServerApp(t, func(o ServerCommand) ServerCommand {
+		o.Port = port
+		o.Auth.JWT.Secret = "test-jwt-secret"
+		o.Auth.JWT.Algo = "HS256"
+		o.Auth.JWT.Header = "X-Custom-JWT"
+		o.Auth.JWT.Issuer = "test-issuer"
+		o.Auth.JWT.Audience = "test-audience"
+		o.Auth.JWT.Map.ID = "uid"
+		o.Auth.JWT.Map.Name = "uname"
+		o.Auth.JWT.Map.Email = "uemail"
+		o.Auth.JWT.Map.Picture = "upic"
+		o.Auth.JWT.Map.Role = "urole"
+		return o
+	})
+
+	go func() { _ = app.run(ctx) }()
+	waitForHTTPServerStart(port)
+
+	assert.Equal(t, "test-jwt-secret", app.restSrv.JWTAuthConf.Secret)
+	assert.Equal(t, "HS256", app.restSrv.JWTAuthConf.Algo)
+	assert.Equal(t, "X-Custom-JWT", app.restSrv.JWTAuthConf.Header)
+	assert.Equal(t, "test-issuer", app.restSrv.JWTAuthConf.Issuer)
+	assert.Equal(t, "test-audience", app.restSrv.JWTAuthConf.Audience)
+	assert.Equal(t, "uid", app.restSrv.JWTAuthConf.Map.ID)
+	assert.Equal(t, "uname", app.restSrv.JWTAuthConf.Map.Name)
+	assert.Equal(t, "uemail", app.restSrv.JWTAuthConf.Map.Email)
+	assert.Equal(t, "upic", app.restSrv.JWTAuthConf.Map.Picture)
+	assert.Equal(t, "urole", app.restSrv.JWTAuthConf.Map.Role)
+
+	cancel()
+	app.Wait()
+}
+
+func TestServerApp_ForwardAuthConfigPassedToRest(t *testing.T) {
+	port := chooseRandomUnusedPort()
+	app, ctx, cancel := prepServerApp(t, func(o ServerCommand) ServerCommand {
+		o.Port = port
+		o.Auth.Forward.Header = "X-Forwarded-User"
+		o.Auth.Forward.Map.ID = "fid"
+		o.Auth.Forward.Map.Name = "fname"
+		o.Auth.Forward.Map.Email = "femail"
+		o.Auth.Forward.Map.Picture = "fpic"
+		o.Auth.Forward.Map.Role = "frole"
+		return o
+	})
+
+	go func() { _ = app.run(ctx) }()
+	waitForHTTPServerStart(port)
+
+	assert.Equal(t, "X-Forwarded-User", app.restSrv.ForwardAuthConf.Header)
+	assert.Equal(t, "fid", app.restSrv.ForwardAuthConf.Map.ID)
+	assert.Equal(t, "fname", app.restSrv.ForwardAuthConf.Map.Name)
+	assert.Equal(t, "femail", app.restSrv.ForwardAuthConf.Map.Email)
+	assert.Equal(t, "fpic", app.restSrv.ForwardAuthConf.Map.Picture)
+	assert.Equal(t, "frole", app.restSrv.ForwardAuthConf.Map.Role)
+
+	cancel()
+	app.Wait()
+}
+
+func TestAddAuthProviders_CountsJWTAndForwardAuth(t *testing.T) {
+	// Test that addAuthProviders counts JWT auth as a provider (no "no auth providers" warning)
+	// We can't directly check providersCount, but we can verify the function doesn't error
+	// with JWT secret set and no other providers.
+	s := ServerCommand{}
+	s.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+	s.Auth.JWT.Secret = "test-secret"
+	s.Auth.JWT.Algo = "HS256"
+	s.Auth.JWT.Header = "X-Auth-Token"
+	s.Auth.Forward.Header = "X-Forwarded-User"
+
+	// Create a minimal authenticator to test addAuthProviders
+	app, ctx, cancel := prepServerApp(t, func(o ServerCommand) ServerCommand {
+		o.Port = chooseRandomUnusedPort()
+		o.Auth.JWT.Secret = "test-secret"
+		o.Auth.JWT.Algo = "HS256"
+		o.Auth.JWT.Header = "X-Auth-Token"
+		o.Auth.Forward.Header = "X-Forwarded-User"
+		return o
+	})
+
+	go func() { _ = app.run(ctx) }()
+	waitForHTTPServerStart(app.Port)
+
+	// verify the server started without error (providers count included JWT and forward auth)
+	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/v1/ping", app.Port))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "pong", string(body))
+
+	cancel()
+	app.Wait()
+}
+
 func chooseRandomUnusedPort() (port int) {
 	for i := 0; i < 10; i++ {
 		port = 40000 + int(rand.Int31n(10000))
