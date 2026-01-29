@@ -28,6 +28,12 @@ func NewPostgresDB(dsn string, sites []string) (*PostgresDB, error) {
 		return nil, fmt.Errorf("failed to open postgres connection: %w", err)
 	}
 
+	closeDB := func() {
+		if sqlDB, e := db.DB(); e == nil {
+			_ = sqlDB.Close()
+		}
+	}
+
 	// run auto-migration for all GORM models
 	if err = db.AutoMigrate(
 		&GormComment{},
@@ -37,12 +43,14 @@ func NewPostgresDB(dsn string, sites []string) (*PostgresDB, error) {
 		&GormReadOnlyPost{},
 		&GormUserDetail{},
 	); err != nil {
+		closeDB()
 		return nil, fmt.Errorf("failed to auto-migrate postgres tables: %w", err)
 	}
 
 	// verify connectivity
 	var result int
 	if err = db.Raw("SELECT 1").Scan(&result).Error; err != nil {
+		closeDB()
 		return nil, fmt.Errorf("failed to verify postgres connectivity: %w", err)
 	}
 
@@ -414,6 +422,9 @@ func (p *PostgresDB) Count(req FindRequest) (int, error) {
 			Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).
 			Count(&count).Error; err != nil {
 			return 0, fmt.Errorf("failed to count comments for user: %w", err)
+		}
+		if count == 0 {
+			return 0, fmt.Errorf("no comments for user %s in store for %s site", req.UserID, req.Locator.SiteID)
 		}
 		return int(count), nil
 	}

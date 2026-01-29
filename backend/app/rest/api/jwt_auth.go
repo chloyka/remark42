@@ -170,6 +170,8 @@ func ForwardAuthMiddleware(cfg ForwardAuthConfig, tokenCreator internalTokenCrea
 			if tokenCreator == nil {
 				r = token.SetUserInfo(r, user)
 			}
+			// mark request as externally authenticated so other external auth middleware skips it
+			r = r.WithContext(context.WithValue(r.Context(), externalAuthDoneKey, true))
 			next.ServeHTTP(w, r)
 		})
 	}
