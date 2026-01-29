@@ -165,8 +165,8 @@ Implement a new storage engine backed by PostgreSQL via GORM, as an alternative 
 
 ## Post-Completion
 
-- [ ] Update README.md if user-facing changes (document new env vars `STORE_TYPE=postgres`, `STORE_POSTGRES_DSN`)
-- [ ] Move this plan to `docs/plans/completed/`
+- [x] Update README.md if user-facing changes (document new env vars `STORE_TYPE=postgres`, `STORE_POSTGRES_DSN`)
+- [x] Move this plan to `docs/plans/completed/`
 
 ## Notes
 

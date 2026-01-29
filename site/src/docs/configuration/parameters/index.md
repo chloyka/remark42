@@ -38,13 +38,14 @@ services:
 | url                            | REMARK_URL                     |                         | URL to Remark42 server, _required_                       |
 | secret                         | SECRET                         |                         | the shared secret key used to sign JWT, should be a random, long, hard-to-guess string, _required_ |
 | site                           | SITE                           | `remark`                | site name(s), _multi_                                    |
-| store.type                     | STORE_TYPE                     | `bolt`                  | type of storage, `bolt` or `rpc`                         |
+| store.type                     | STORE_TYPE                     | `bolt`                  | type of storage, `bolt`, `rpc`, or `postgres`            |
 | store.bolt.path                | STORE_BOLT_PATH                | `./var`                 | parent directory for the bolt files                      |
 | store.bolt.timeout             | STORE_BOLT_TIMEOUT             | `30s`                   | boltdb access timeout                                    |
 | store.rpc.api                  | STORE_RPC_API                  |                         | rpc extension api url                                    |
 | store.rpc.timeout              | STORE_RPC_TIMEOUT              |                         | http timeout (default: 5s)                               |
 | store.rpc.auth_user            | STORE_RPC_AUTH_USER            |                         | basic auth user name                                     |
 | store.rpc.auth_passwd          | STORE_RPC_AUTH_PASSWD          |                         | basic auth user password                                 |
+| store.postgres.dsn             | STORE_POSTGRES_DSN             |                         | PostgreSQL connection string (e.g. `host=localhost user=remark42 password=secret dbname=remark42 sslmode=disable`) |
 | admin.type                     | ADMIN_TYPE                     | `shared`                | type of admin store, `shared` or `rpc`                   |
 | admin.rpc.api                  | ADMIN_RPC_API                  |                         | rpc extension api url                                    |
 | admin.rpc.timeout              | ADMIN_RPC_TIMEOUT              |                         | http timeout (default: 5s)                               |
