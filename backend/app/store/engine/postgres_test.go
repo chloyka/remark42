@@ -1464,3 +1464,309 @@ func TestPostgresDB_UserDetailAllWithUserID(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported request")
 }
+
+// TestPostgresDB_FullCycle exercises the complete lifecycle of the PostgresDB engine:
+// Create -> Find -> Update -> Delete -> Flag -> ListFlags -> UserDetail -> Info -> Count -> Close
+func TestPostgresDB_FullCycle(t *testing.T) {
+	dsn := getTestDSN(t)
+	pg, err := NewPostgresDB(dsn, []string{"test-site"})
+	require.NoError(t, err)
+	cleanPostgresTables(t, pg)
+	defer func() {
+		cleanPostgresTables(t, pg)
+		require.NoError(t, pg.Close())
+	}()
+
+	loc := store.Locator{URL: "https://example.com/post1", SiteID: "test-site"}
+
+	// --- Step 1: Create comments ---
+	c1 := store.Comment{
+		ID:        "fc-1",
+		ParentID:  "",
+		Text:      "first comment",
+		Orig:      "first comment",
+		Timestamp: time.Date(2024, 1, 10, 12, 0, 0, 0, time.UTC),
+		Locator:   loc,
+		User:      store.User{ID: "user1", Name: "Alice", IP: "127.0.0.1"},
+		Score:     0,
+	}
+	id1, err := pg.Create(c1)
+	require.NoError(t, err)
+	assert.Equal(t, "fc-1", id1)
+
+	c2 := store.Comment{
+		ID:        "fc-2",
+		ParentID:  "fc-1",
+		Text:      "reply to first",
+		Orig:      "reply to first",
+		Timestamp: time.Date(2024, 1, 10, 12, 5, 0, 0, time.UTC),
+		Locator:   loc,
+		User:      store.User{ID: "user2", Name: "Bob", IP: "127.0.0.2"},
+		Score:     0,
+	}
+	id2, err := pg.Create(c2)
+	require.NoError(t, err)
+	assert.Equal(t, "fc-2", id2)
+
+	c3 := store.Comment{
+		ID:        "fc-3",
+		Text:      "third comment",
+		Orig:      "third comment",
+		Timestamp: time.Date(2024, 1, 10, 12, 10, 0, 0, time.UTC),
+		Locator:   loc,
+		User:      store.User{ID: "user1", Name: "Alice", IP: "127.0.0.1"},
+		Score:     3,
+		Votes:     map[string]bool{"user2": true},
+	}
+	_, err = pg.Create(c3)
+	require.NoError(t, err)
+
+	// create a comment on a different post
+	loc2 := store.Locator{URL: "https://example.com/post2", SiteID: "test-site"}
+	c4 := store.Comment{
+		ID:        "fc-4",
+		Text:      "different post comment",
+		Orig:      "different post comment",
+		Timestamp: time.Date(2024, 1, 11, 8, 0, 0, 0, time.UTC),
+		Locator:   loc2,
+		User:      store.User{ID: "user2", Name: "Bob"},
+	}
+	_, err = pg.Create(c4)
+	require.NoError(t, err)
+
+	// --- Step 2: Find ---
+	// find by post
+	found, err := pg.Find(FindRequest{Locator: loc, Sort: "+time"})
+	require.NoError(t, err)
+	require.Equal(t, 3, len(found))
+	assert.Equal(t, "fc-1", found[0].ID)
+	assert.Equal(t, "fc-2", found[1].ID)
+	assert.Equal(t, "fc-3", found[2].ID)
+
+	// find by user across site
+	found, err = pg.Find(FindRequest{Locator: store.Locator{SiteID: "test-site"}, UserID: "user1", Sort: "+time"})
+	require.NoError(t, err)
+	require.Equal(t, 2, len(found))
+	assert.Equal(t, "fc-1", found[0].ID)
+	assert.Equal(t, "fc-3", found[1].ID)
+
+	// find last for site
+	found, err = pg.Find(FindRequest{Locator: store.Locator{SiteID: "test-site"}, Sort: "-time", Limit: 2})
+	require.NoError(t, err)
+	require.Equal(t, 2, len(found))
+	assert.Equal(t, "fc-4", found[0].ID)
+	assert.Equal(t, "fc-3", found[1].ID)
+
+	// --- Step 3: Count ---
+	cnt, err := pg.Count(FindRequest{Locator: loc})
+	require.NoError(t, err)
+	assert.Equal(t, 3, cnt)
+
+	cnt, err = pg.Count(FindRequest{Locator: store.Locator{SiteID: "test-site"}, UserID: "user1"})
+	require.NoError(t, err)
+	assert.Equal(t, 2, cnt)
+
+	// --- Step 4: Info ---
+	infos, err := pg.Info(InfoRequest{Locator: loc})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(infos))
+	assert.Equal(t, 3, infos[0].Count)
+	assert.Equal(t, "https://example.com/post1", infos[0].URL)
+	assert.False(t, infos[0].ReadOnly)
+
+	// info for site (lists all posts)
+	infos, err = pg.Info(InfoRequest{Locator: store.Locator{SiteID: "test-site"}})
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(infos))
+
+	// --- Step 5: Update ---
+	got, err := pg.Get(GetRequest{Locator: loc, CommentID: "fc-1"})
+	require.NoError(t, err)
+	got.Text = "updated first comment"
+	got.Score = 10
+	editTS := time.Date(2024, 1, 10, 13, 0, 0, 0, time.UTC)
+	got.Edit = &store.Edit{Timestamp: editTS, Summary: "fixed typo"}
+	err = pg.Update(got)
+	require.NoError(t, err)
+
+	updated, err := pg.Get(GetRequest{Locator: loc, CommentID: "fc-1"})
+	require.NoError(t, err)
+	assert.Equal(t, "updated first comment", updated.Text)
+	assert.Equal(t, 10, updated.Score)
+	require.NotNil(t, updated.Edit)
+	assert.Equal(t, "fixed typo", updated.Edit.Summary)
+	assert.Equal(t, "user1", updated.User.ID, "immutable field preserved")
+	assert.Equal(t, "Alice", updated.User.Name, "immutable field preserved")
+
+	// --- Step 6: Flag operations ---
+	// read-only flag
+	val, err := pg.Flag(FlagRequest{Flag: ReadOnly, Locator: loc})
+	require.NoError(t, err)
+	assert.False(t, val)
+
+	val, err = pg.Flag(FlagRequest{Flag: ReadOnly, Locator: loc, Update: FlagTrue})
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// create should fail on read-only post
+	_, err = pg.Create(store.Comment{
+		ID: "fc-blocked", Text: "should fail", Timestamp: time.Now(),
+		Locator: loc, User: store.User{ID: "user3", Name: "Charlie"},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "read-only")
+
+	// clear read-only
+	val, err = pg.Flag(FlagRequest{Flag: ReadOnly, Locator: loc, Update: FlagFalse})
+	require.NoError(t, err)
+	assert.False(t, val)
+
+	// verified flag
+	val, err = pg.Flag(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "test-site"}, UserID: "user1", Update: FlagTrue})
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	val, err = pg.Flag(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "test-site"}, UserID: "user1"})
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// blocked flag with TTL
+	val, err = pg.Flag(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "test-site"}, UserID: "user2", Update: FlagTrue, TTL: time.Hour})
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	val, err = pg.Flag(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "test-site"}, UserID: "user2"})
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// --- Step 7: ListFlags ---
+	verifiedList, err := pg.ListFlags(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "test-site"}})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(verifiedList))
+	assert.Equal(t, "user1", verifiedList[0].(string))
+
+	blockedList, err := pg.ListFlags(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "test-site"}})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(blockedList))
+	bu, ok := blockedList[0].(store.BlockedUser)
+	assert.True(t, ok)
+	assert.Equal(t, "user2", bu.ID)
+
+	// --- Step 8: UserDetail ---
+	// set email for user1
+	details, err := pg.UserDetail(UserDetailRequest{
+		Detail: UserEmail, Locator: store.Locator{SiteID: "test-site"},
+		UserID: "user1", Update: "alice@example.com",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(details))
+	assert.Equal(t, "alice@example.com", details[0].Email)
+
+	// set telegram for user1
+	details, err = pg.UserDetail(UserDetailRequest{
+		Detail: UserTelegram, Locator: store.Locator{SiteID: "test-site"},
+		UserID: "user1", Update: "@alice",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(details))
+	assert.Equal(t, "@alice", details[0].Telegram)
+
+	// get email for user1
+	details, err = pg.UserDetail(UserDetailRequest{
+		Detail: UserEmail, Locator: store.Locator{SiteID: "test-site"},
+		UserID: "user1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(details))
+	assert.Equal(t, "alice@example.com", details[0].Email)
+
+	// set email for user2
+	_, err = pg.UserDetail(UserDetailRequest{
+		Detail: UserEmail, Locator: store.Locator{SiteID: "test-site"},
+		UserID: "user2", Update: "bob@example.com",
+	})
+	require.NoError(t, err)
+
+	// list all details
+	details, err = pg.UserDetail(UserDetailRequest{
+		Detail: AllUserDetails, Locator: store.Locator{SiteID: "test-site"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(details))
+
+	// --- Step 9: Delete ---
+	// soft delete a comment
+	err = pg.Delete(DeleteRequest{
+		Locator: loc, CommentID: "fc-2", DeleteMode: store.SoftDelete,
+	})
+	require.NoError(t, err)
+
+	softDeleted, err := pg.Get(GetRequest{Locator: loc, CommentID: "fc-2"})
+	require.NoError(t, err)
+	assert.True(t, softDeleted.Deleted)
+	assert.Equal(t, "", softDeleted.Text)
+	assert.Equal(t, "user2", softDeleted.User.ID, "user preserved on soft delete")
+
+	// count should reflect deletion
+	cnt, err = pg.Count(FindRequest{Locator: loc})
+	require.NoError(t, err)
+	assert.Equal(t, 2, cnt, "count should exclude soft deleted comment")
+
+	// hard delete a comment
+	err = pg.Delete(DeleteRequest{
+		Locator: loc, CommentID: "fc-3", DeleteMode: store.HardDelete,
+	})
+	require.NoError(t, err)
+
+	hardDeleted, err := pg.Get(GetRequest{Locator: loc, CommentID: "fc-3"})
+	require.NoError(t, err)
+	assert.True(t, hardDeleted.Deleted)
+	assert.Equal(t, "deleted", hardDeleted.User.ID, "user replaced on hard delete")
+	assert.Equal(t, "deleted", hardDeleted.User.Name)
+
+	// count after hard delete
+	cnt, err = pg.Count(FindRequest{Locator: loc})
+	require.NoError(t, err)
+	assert.Equal(t, 1, cnt, "count should exclude hard deleted comment")
+
+	// info should reflect updated count
+	infos, err = pg.Info(InfoRequest{Locator: loc})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(infos))
+	assert.Equal(t, 1, infos[0].Count)
+
+	// delete user detail
+	err = pg.Delete(DeleteRequest{
+		Locator:    store.Locator{SiteID: "test-site"},
+		UserID:     "user1",
+		UserDetail: UserEmail,
+	})
+	require.NoError(t, err)
+
+	// verify email was cleared but telegram remains
+	details, err = pg.UserDetail(UserDetailRequest{
+		Detail: UserTelegram, Locator: store.Locator{SiteID: "test-site"},
+		UserID: "user1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(details))
+	assert.Equal(t, "@alice", details[0].Telegram)
+
+	// clean up flags before close verification
+	_, err = pg.Flag(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "test-site"}, UserID: "user1", Update: FlagFalse})
+	require.NoError(t, err)
+	_, err = pg.Flag(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "test-site"}, UserID: "user2", Update: FlagFalse})
+	require.NoError(t, err)
+
+	// verify flags cleared
+	verifiedList, err = pg.ListFlags(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "test-site"}})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(verifiedList))
+
+	blockedList, err = pg.ListFlags(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "test-site"}})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(blockedList))
+
+	// --- Step 10: Close ---
+	// Close is handled by defer; if it fails, the test will fail via require.NoError
+}

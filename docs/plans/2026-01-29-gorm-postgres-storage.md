@@ -149,12 +149,12 @@ Implement a new storage engine backed by PostgreSQL via GORM, as an alternative 
 **Files:**
 - Create: `backend/app/store/engine/postgres_test.go` (if not already created in earlier tasks; consolidate all postgres tests here)
 
-- [ ] Write a full integration test `TestPostgresDB_FullCycle` that exercises Create -> Find -> Update -> Delete -> Flag -> ListFlags -> UserDetail -> Info -> Count -> Close in sequence
-- [ ] Ensure all existing bolt tests still pass: `cd backend/app/store/engine && go test -count 1 ./...`
-- [ ] Run full backend test suite: `cd backend/app && go test -timeout=120s -count 1 ./...`
-- [ ] Run linter: `cd backend && golangci-lint run`
-- [ ] Run example tests: `cd backend/_example/memory_store && go test -race ./... && go build -race ./...`
-- [ ] Run example lint: `cd backend/_example/memory_store && golangci-lint run --config ../../.golangci.yml`
+- [x] Write a full integration test `TestPostgresDB_FullCycle` that exercises Create -> Find -> Update -> Delete -> Flag -> ListFlags -> UserDetail -> Info -> Count -> Close in sequence
+- [x] Ensure all existing bolt tests still pass: `cd backend/app/store/engine && go test -count 1 ./...`
+- [x] Run full backend test suite: `cd backend/app && go test -timeout=120s -count 1 ./...`
+- [x] Run linter: `cd backend && golangci-lint run`
+- [x] Run example tests: `cd backend/_example/memory_store && go test -race ./... && go build -race ./...`
+- [x] Run example lint: `cd backend/_example/memory_store && golangci-lint run --config ../../.golangci.yml`
 
 ## Verification
 
