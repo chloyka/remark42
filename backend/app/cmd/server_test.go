@@ -364,6 +364,17 @@ func TestServerApp_Failed(t *testing.T) {
 	assert.EqualError(t, err, "failed to make data store engine: unsupported store type blah")
 	t.Log(err)
 
+	// postgres with invalid DSN
+	opts = ServerCommand{}
+	opts.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+	opts.Store.Type = "postgres"
+	opts.Store.Postgres.DSN = "host=localhost port=99999 user=invalid dbname=invalid sslmode=disable"
+	opts.BackupLocation = "/tmp"
+	_, err = opts.newServerApp(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to make data store engine")
+	t.Log(err)
+
 	// wrong redis location
 	opts = ServerCommand{}
 	opts.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
@@ -388,6 +399,28 @@ func TestServerApp_Failed(t *testing.T) {
 	assert.EqualError(t, err,
 		"failed to make authenticator: an AppleProvider creating failed: "+
 			"provided private key is not ECDSA")
+	t.Log(err)
+}
+
+func TestServerApp_MakeDataStorePostgres(t *testing.T) {
+	// verify "postgres" is accepted as a valid store type by the flag parser
+	opts := ServerCommand{}
+	opts.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+	p := flags.NewParser(&opts, flags.Default)
+	_, err := p.ParseArgs([]string{"--store.type=postgres", "--store.postgres.dsn=host=localhost dbname=test"})
+	assert.NoError(t, err)
+	assert.Equal(t, "postgres", opts.Store.Type)
+	assert.Equal(t, "host=localhost dbname=test", opts.Store.Postgres.DSN)
+
+	// makeDataStore with invalid DSN returns an error (no actual postgres available)
+	cmd := ServerCommand{}
+	cmd.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+	cmd.Store.Type = "postgres"
+	cmd.Store.Postgres.DSN = "host=localhost port=99999 user=invalid dbname=invalid sslmode=disable"
+	cmd.Sites = []string{"remark"}
+	_, err = cmd.makeDataStore()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "can't initialize data store")
 	t.Log(err)
 }
 

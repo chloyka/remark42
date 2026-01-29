@@ -178,12 +178,15 @@ type AuthGroup struct {
 
 // StoreGroup defines options group for store params
 type StoreGroup struct {
-	Type string `long:"type" env:"TYPE" description:"type of storage" choice:"bolt" choice:"rpc" default:"bolt"` // nolint
+	Type string `long:"type" env:"TYPE" description:"type of storage" choice:"bolt" choice:"rpc" choice:"postgres" default:"bolt"` // nolint
 	Bolt struct {
 		Path    string        `long:"path" env:"PATH" default:"./var" description:"parent directory for the bolt files"`
 		Timeout time.Duration `long:"timeout" env:"TIMEOUT" default:"30s" description:"bolt timeout"`
 	} `group:"bolt" namespace:"bolt" env-namespace:"BOLT"`
-	RPC RPCGroup `group:"rpc" namespace:"rpc" env-namespace:"RPC"`
+	RPC      RPCGroup `group:"rpc" namespace:"rpc" env-namespace:"RPC"`
+	Postgres struct {
+		DSN string `long:"dsn" env:"DSN" description:"PostgreSQL connection string"`
+	} `group:"postgres" namespace:"postgres" env-namespace:"POSTGRES"`
 }
 
 // ImageGroup defines options group for store pictures
@@ -865,6 +868,8 @@ func (s *ServerCommand) makeDataStore() (result engine.Interface, err error) {
 			AuthPasswd: s.Store.RPC.AuthPassword,
 		}}
 		return r, nil
+	case "postgres":
+		result, err = engine.NewPostgresDB(s.Store.Postgres.DSN, s.Sites)
 	default:
 		return nil, fmt.Errorf("unsupported store type %s", s.Store.Type)
 	}

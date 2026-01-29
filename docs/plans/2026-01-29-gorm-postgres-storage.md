@@ -129,20 +129,20 @@ Implement a new storage engine backed by PostgreSQL via GORM, as an alternative 
 **Files:**
 - Modify: `backend/app/cmd/server.go`
 
-- [ ] Add `"postgres"` as a choice in `StoreGroup.Type` field: `choice:"bolt" choice:"rpc" choice:"postgres"`
-- [ ] Add `Postgres` sub-struct in `StoreGroup`:
+- [x] Add `"postgres"` as a choice in `StoreGroup.Type` field: `choice:"bolt" choice:"rpc" choice:"postgres"`
+- [x] Add `Postgres` sub-struct in `StoreGroup`:
   ```
   Postgres struct {
       DSN string `long:"dsn" env:"DSN" description:"PostgreSQL connection string"`
   } `group:"postgres" namespace:"postgres" env-namespace:"POSTGRES"`
   ```
   This gives env var `STORE_POSTGRES_DSN` (matching the `STORE` namespace + `POSTGRES` namespace + `DSN`)
-- [ ] Add `"postgres"` case in `makeDataStore()`:
+- [x] Add `"postgres"` case in `makeDataStore()`:
   - Call `engine.NewPostgresDB(s.Store.Postgres.DSN, s.Sites)`
   - Return the engine
-- [ ] Add `gorm.io/gorm` and `gorm.io/driver/postgres` imports
-- [ ] Write test for postgres case in `makeDataStore` (can verify it returns error with invalid DSN, skip full integration if no DB)
-- [ ] Run `cd backend/app && go test -run TestServerCommand -count 1 ./cmd/` — must pass before task 7
+- [x] Add `gorm.io/gorm` and `gorm.io/driver/postgres` imports
+- [x] Write test for postgres case in `makeDataStore` (can verify it returns error with invalid DSN, skip full integration if no DB)
+- [x] Run `cd backend/app && go test -run TestServerCommand -count 1 ./cmd/` — must pass before task 7
 
 ## Task 7: Full integration test and cleanup
 
