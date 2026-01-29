@@ -102,6 +102,22 @@ services:
 | auth.yandex.csec               | AUTH_YANDEX_CSEC               |                         | Yandex OAuth client secret                               |
 | auth.dev                       | AUTH_DEV                       | `false`                 | local OAuth2 server, development mode only               |
 | auth.anon                      | AUTH_ANON                      | `false`                 | enable anonymous login                                   |
+| auth.jwt.secret                | AUTH_JWT_SECRET                |                         | JWT secret (HMAC) or public key (RSA/ECDSA) to validate external JWT tokens |
+| auth.jwt.algo                  | AUTH_JWT_ALGO                  | `HS256`                 | JWT signing algorithm (`HS256`, `HS384`, `HS512`, `RS256`, `RS384`, `RS512`, `ES256`, `ES384`, `ES512`) |
+| auth.jwt.header                | AUTH_JWT_HEADER                | `X-Auth-Token`          | HTTP header containing the JWT token                     |
+| auth.jwt.issuer                | AUTH_JWT_ISSUER                |                         | expected JWT issuer claim for validation                 |
+| auth.jwt.audience              | AUTH_JWT_AUDIENCE              |                         | expected JWT audience claim for validation               |
+| auth.jwt.map.id                | AUTH_JWT_MAP_ID                | `sub`                   | JWT claim for user ID                                    |
+| auth.jwt.map.name              | AUTH_JWT_MAP_NAME              | `name`                  | JWT claim for display name                               |
+| auth.jwt.map.email             | AUTH_JWT_MAP_EMAIL             | `email`                 | JWT claim for email                                      |
+| auth.jwt.map.picture           | AUTH_JWT_MAP_PICTURE           | `picture`               | JWT claim for avatar URL                                 |
+| auth.jwt.map.role              | AUTH_JWT_MAP_ROLE              | `role`                  | JWT claim for role (`admin` grants admin privileges)     |
+| auth.forward.header            | AUTH_FORWARD_HEADER            |                         | HTTP header containing decoded JWT payload as JSON (enables forward-auth mode) |
+| auth.forward.map.id            | AUTH_FORWARD_MAP_ID            | `sub`                   | JSON key for user ID                                     |
+| auth.forward.map.name          | AUTH_FORWARD_MAP_NAME          | `name`                  | JSON key for display name                                |
+| auth.forward.map.email         | AUTH_FORWARD_MAP_EMAIL         | `email`                 | JSON key for email                                       |
+| auth.forward.map.picture       | AUTH_FORWARD_MAP_PICTURE       | `picture`               | JSON key for avatar URL                                  |
+| auth.forward.map.role          | AUTH_FORWARD_MAP_ROLE          | `role`                  | JSON key for role (`admin` grants admin privileges)      |
 | auth.email.enable              | AUTH_EMAIL_ENABLE              | `false`                 | enable auth via email                                    |
 | auth.email.from                | AUTH_EMAIL_FROM                |                         | email from (e.g. `john.doe@example.com` or `"John Doe"<john.doe@example.com>`) |
 | auth.email.subj                | AUTH_EMAIL_SUBJ                | `remark42 confirmation` | email subject                                            |

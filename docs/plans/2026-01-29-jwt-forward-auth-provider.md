@@ -161,18 +161,18 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
 - Modify: `site/src/docs/configuration/parameters/index.md`
 
 ### Steps
-- [ ] Add a new section "JWT Authentication" to `authorization/index.md` explaining:
+- [x] Add a new section "JWT Authentication" to `authorization/index.md` explaining:
   - What JWT auth is and when to use it (behind reverse proxy with JWT-based SSO)
   - All `AUTH_JWT_*` environment variables with descriptions and defaults
   - Example: using with Traefik forward auth or Authelia
   - Role mapping explanation
-- [ ] Add a new section "Forward Auth" to `authorization/index.md` explaining:
+- [x] Add a new section "Forward Auth" to `authorization/index.md` explaining:
   - What forward auth is (reverse proxy decodes JWT and passes claims in header)
   - All `AUTH_FORWARD_*` environment variables with descriptions and defaults
   - Example: Traefik forward auth + Authelia passing decoded user info
   - Role mapping explanation
-- [ ] Add all new `AUTH_JWT_*` and `AUTH_FORWARD_*` parameters to the parameters table in `parameters/index.md`
-- [ ] Verify docs build correctly (if there's a build command)
+- [x] Add all new `AUTH_JWT_*` and `AUTH_FORWARD_*` parameters to the parameters table in `parameters/index.md`
+- [x] Verify docs build correctly (if there's a build command)
 
 ---
 

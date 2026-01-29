@@ -117,6 +117,100 @@ For more details refer to [Yandex OAuth](https://yandex.com/dev/oauth/doc/dg/con
 1. Contact [@BotFather](https://t.me/botfather) and follow his instructions to create your bot (call it, for example, "My site auth bot")
 1. Write down the resulting token as `TELEGRAM_TOKEN` into remark42 config, and also set `AUTH_TELEGRAM` to `true` to enable telegram auth for your users.
 
+### JWT Authentication
+
+JWT authentication allows Remark42 to authenticate users via externally issued JSON Web Tokens. This is useful when Remark42 runs behind a reverse proxy or SSO system (such as Authelia, Authentik, or Keycloak) that issues JWT tokens to authenticated users.
+
+When enabled, Remark42 checks incoming requests for a JWT token in a configurable HTTP header. If a valid token is found, Remark42 extracts user information from the token claims and creates an internal session. If no token header is present, the request falls through to standard OAuth/anonymous auth.
+
+**No login button** is rendered in the UI for JWT auth - it is a transparent provider. The assumption is that users are already authenticated by the upstream system.
+
+#### Configuration
+
+- `AUTH_JWT_SECRET` (**required** to enable JWT mode) - shared secret for HMAC algorithms, or PEM-encoded public key for RSA/ECDSA algorithms
+- `AUTH_JWT_ALGO` (default `HS256`) - JWT signing algorithm. Supported: `HS256`, `HS384`, `HS512`, `RS256`, `RS384`, `RS512`, `ES256`, `ES384`, `ES512`
+- `AUTH_JWT_HEADER` (default `X-Auth-Token`) - HTTP header containing the JWT token
+- `AUTH_JWT_ISSUER` (optional) - expected `iss` claim value for validation
+- `AUTH_JWT_AUDIENCE` (optional) - expected `aud` claim value for validation
+
+#### Claim Mappings
+
+These settings control which JWT claims map to Remark42 user fields:
+
+- `AUTH_JWT_MAP_ID` (default `sub`) - JWT claim for user ID
+- `AUTH_JWT_MAP_NAME` (default `name`) - JWT claim for display name
+- `AUTH_JWT_MAP_EMAIL` (default `email`) - JWT claim for email address
+- `AUTH_JWT_MAP_PICTURE` (default `picture`) - JWT claim for avatar URL
+- `AUTH_JWT_MAP_ROLE` (default `role`) - JWT claim for user role
+
+#### Role Mapping
+
+If the value of the role claim equals `admin` (case-insensitive), the user is granted admin privileges in Remark42. Any other value or a missing role claim results in a regular user.
+
+#### Example: Traefik with Authelia
+
+In this setup, Traefik forwards authenticated requests to Remark42 with an `Authorization` header containing a JWT token issued by Authelia:
+
+```yaml
+services:
+  remark42:
+    image: ghcr.io/umputun/remark42:latest
+    environment:
+      - REMARK_URL=https://remark42.example.com
+      - SITE=example
+      - SECRET=your-remark42-secret
+      - AUTH_JWT_SECRET=your-authelia-jwt-secret
+      - AUTH_JWT_HEADER=Authorization
+      - AUTH_JWT_ISSUER=https://auth.example.com
+```
+
+### Forward Auth
+
+Forward auth mode allows Remark42 to trust pre-decoded user information provided by a reverse proxy. Instead of receiving and validating a JWT token, Remark42 reads a single HTTP header containing a JSON-encoded object with user claims. This is useful when the reverse proxy already validates the token and passes decoded user info downstream.
+
+When enabled, Remark42 checks incoming requests for the configured header. If found, it parses the JSON payload and extracts user information. If the header is absent, the request falls through to standard auth.
+
+Like JWT auth, forward auth is a transparent provider with **no login button** in the UI.
+
+#### Configuration
+
+- `AUTH_FORWARD_HEADER` (**required** to enable forward-auth mode) - HTTP header containing the decoded user payload as a JSON string
+
+#### Field Mappings
+
+These settings control which JSON keys in the header payload map to Remark42 user fields:
+
+- `AUTH_FORWARD_MAP_ID` (default `sub`) - JSON key for user ID
+- `AUTH_FORWARD_MAP_NAME` (default `name`) - JSON key for display name
+- `AUTH_FORWARD_MAP_EMAIL` (default `email`) - JSON key for email address
+- `AUTH_FORWARD_MAP_PICTURE` (default `picture`) - JSON key for avatar URL
+- `AUTH_FORWARD_MAP_ROLE` (default `role`) - JSON key for user role
+
+#### Role Mapping
+
+Same as JWT mode: if the role field value equals `admin` (case-insensitive), the user gets admin privileges.
+
+#### Example: Traefik with Forward Auth
+
+In this setup, Traefik's forward auth middleware validates the user and passes decoded claims to Remark42 in the `X-Forwarded-User` header:
+
+```yaml
+services:
+  remark42:
+    image: ghcr.io/umputun/remark42:latest
+    environment:
+      - REMARK_URL=https://remark42.example.com
+      - SITE=example
+      - SECRET=your-remark42-secret
+      - AUTH_FORWARD_HEADER=X-Forwarded-User
+```
+
+The reverse proxy should set the header to a JSON string like:
+
+```
+X-Forwarded-User: {"sub":"user123","name":"John Doe","email":"john@example.com","role":"admin"}
+```
+
 ### Anonymous
 
 Optionally, anonymous access can be turned on. In this case, an extra `anonymous` provider will allow logins without any social login with any name satisfying two conditions:
