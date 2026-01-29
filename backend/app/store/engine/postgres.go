@@ -109,11 +109,13 @@ func (p *PostgresDB) upsertPostInfo(comment store.Comment) error {
 
 	// get first and last timestamps for non-deleted comments
 	var firstTS, lastTS time.Time
-	row := p.db.Model(&GormComment{}).
-		Where("site_id = ? AND url = ? AND deleted = ?", comment.Locator.SiteID, comment.Locator.URL, false).
-		Select("MIN(timestamp), MAX(timestamp)").Row()
-	if err := row.Scan(&firstTS, &lastTS); err != nil {
-		return fmt.Errorf("failed to get timestamps for post info: %w", err)
+	if cnt > 0 {
+		row := p.db.Model(&GormComment{}).
+			Where("site_id = ? AND url = ? AND deleted = ?", comment.Locator.SiteID, comment.Locator.URL, false).
+			Select("MIN(timestamp), MAX(timestamp)").Row()
+		if err := row.Scan(&firstTS, &lastTS); err != nil {
+			return fmt.Errorf("failed to get timestamps for post info: %w", err)
+		}
 	}
 
 	pi := GormPostInfo{
