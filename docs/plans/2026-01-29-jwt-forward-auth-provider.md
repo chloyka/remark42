@@ -71,9 +71,9 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
 - Create: `backend/app/rest/api/jwt_auth_test.go`
 
 ### Steps
-- [ ] Create `JWTAuthConfig` struct holding all configuration for the middleware (secret, algo, header, issuer, audience, field mappings)
-- [ ] Create `ForwardAuthConfig` struct holding forward-auth configuration (header, field mappings)
-- [ ] Implement `JWTAuthMiddleware(cfg JWTAuthConfig, tokenService TokenService) func(http.Handler) http.Handler`:
+- [x] Create `JWTAuthConfig` struct holding all configuration for the middleware (secret, algo, header, issuer, audience, field mappings)
+- [x] Create `ForwardAuthConfig` struct holding forward-auth configuration (header, field mappings)
+- [x] Implement `JWTAuthMiddleware(cfg JWTAuthConfig, tokenService TokenService) func(http.Handler) http.Handler`:
   - Check for JWT in the configured header
   - If no header present, pass through to next handler (non-blocking, the user might use standard auth)
   - Parse and validate the JWT using the configured algorithm and secret
@@ -82,7 +82,7 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
   - Generate user ID with `jwt_` prefix + mapped ID value (to namespace external users)
   - Check role mapping: if role claim == "admin" (case-insensitive), set admin flag
   - Create internal remark42 token via `token.User` and set it in the request context using `token.SetUserInfo()`
-- [ ] Implement `ForwardAuthMiddleware(cfg ForwardAuthConfig) func(http.Handler) http.Handler`:
+- [x] Implement `ForwardAuthMiddleware(cfg ForwardAuthConfig) func(http.Handler) http.Handler`:
   - Check for decoded payload in the configured header (JSON string)
   - If no header present, pass through
   - Parse JSON payload
@@ -90,7 +90,7 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
   - Generate user ID with `forward_` prefix + mapped ID value
   - Check role mapping same as JWT mode
   - Set user in request context using `token.SetUserInfo()`
-- [ ] Write comprehensive tests in `jwt_auth_test.go`:
+- [x] Write comprehensive tests in `jwt_auth_test.go`:
   - Test JWT middleware with valid HS256 token
   - Test JWT middleware with invalid token (bad signature)
   - Test JWT middleware with expired token
@@ -104,7 +104,7 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
   - Test forward-auth middleware with custom mappings
   - Test forward-auth middleware with missing header (pass-through)
   - Test forward-auth middleware with invalid JSON
-- [ ] Run `cd backend/app && go test -count 1 ./rest/api/` - must pass
+- [x] Run `cd backend/app && go test -count 1 ./rest/api/` - must pass
 
 ---
 
