@@ -106,23 +106,23 @@ Implement a new storage engine backed by PostgreSQL via GORM, as an alternative 
 **Files:**
 - Modify: `backend/app/store/engine/postgres.go`
 
-- [ ] Implement `Flag(req FlagRequest) (bool, error)`:
+- [x] Implement `Flag(req FlagRequest) (bool, error)`:
   - `ReadOnly` flag: get/set post read-only status in `readonly_posts` table
   - `Verified` flag: get/set user verified status in `verified_users` table
   - `Blocked` flag: get/set user blocked status in `blocked_users` table (with TTL via `Until` field)
   - When `Update == FlagNonSet`: return current flag value (get mode)
   - When `Update == FlagTrue/FlagFalse`: set the value (set mode)
-- [ ] Implement `ListFlags(req FlagRequest) ([]interface{}, error)`:
+- [x] Implement `ListFlags(req FlagRequest) ([]interface{}, error)`:
   - `ReadOnly`: return list of read-only post URLs for site
   - `Verified`: return list of verified user IDs for site
   - `Blocked`: return list of `store.BlockedUser` for site (filter out expired blocks)
-- [ ] Implement `UserDetail(req UserDetailRequest) ([]UserDetailEntry, error)`:
+- [x] Implement `UserDetail(req UserDetailRequest) ([]UserDetailEntry, error)`:
   - Get/set user email, telegram details
   - If `Update` is set: upsert the detail value
   - If `Detail == AllUserDetails` and no `UserID`: list all user details for site
   - Otherwise: return detail(s) for specific user
-- [ ] Write tests for Flag (all three types, get and set), ListFlags, UserDetail (get, set, list)
-- [ ] Run `cd backend/app/store/engine && go test -run TestPostgresDB -count 1 ./...` — must pass before task 6
+- [x] Write tests for Flag (all three types, get and set), ListFlags, UserDetail (get, set, list)
+- [x] Run `cd backend/app/store/engine && go test -run TestPostgresDB -count 1 ./...` — must pass before task 6
 
 ## Task 6: Wire up PostgresDB in server configuration
 

@@ -457,17 +457,239 @@ func (p *PostgresDB) infoForSite(req InfoRequest) ([]store.PostInfo, error) {
 	return result, nil
 }
 
-// Flag gets or sets flag values
-func (p *PostgresDB) Flag(_ FlagRequest) (bool, error) {
-	return false, fmt.Errorf("not implemented")
+// Flag gets or sets flag values.
+// When Update is FlagNonSet, it returns the current value (get mode).
+// When Update is FlagTrue or FlagFalse, it sets the value (set mode).
+func (p *PostgresDB) Flag(req FlagRequest) (bool, error) {
+	if req.Update == FlagNonSet {
+		return p.checkFlag(req), nil
+	}
+	return p.setFlag(req)
 }
 
-// ListFlags returns list of flagged entries
-func (p *PostgresDB) ListFlags(_ FlagRequest) ([]interface{}, error) {
-	return nil, fmt.Errorf("not implemented")
+// checkFlag returns the current value of a flag
+func (p *PostgresDB) checkFlag(req FlagRequest) bool {
+	switch req.Flag {
+	case ReadOnly:
+		return p.isReadOnly(req.Locator)
+	case Verified:
+		var count int64
+		p.db.Model(&GormVerifiedUser{}).Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).Count(&count)
+		return count > 0
+	case Blocked:
+		var bu GormBlockedUser
+		result := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).First(&bu)
+		if result.Error != nil {
+			return false
+		}
+		return time.Now().Before(bu.Until)
+	}
+	return false
 }
 
-// UserDetail gets or sets user detail values
-func (p *PostgresDB) UserDetail(_ UserDetailRequest) ([]UserDetailEntry, error) {
-	return nil, fmt.Errorf("not implemented")
+// setFlag sets a flag value and returns the resulting state
+func (p *PostgresDB) setFlag(req FlagRequest) (bool, error) {
+	switch req.Flag {
+	case ReadOnly:
+		return p.setReadOnlyFlag(req)
+	case Verified:
+		return p.setVerifiedFlag(req)
+	case Blocked:
+		return p.setBlockedFlag(req)
+	}
+	return false, fmt.Errorf("unsupported flag %v", req.Flag)
+}
+
+// setReadOnlyFlag sets or clears the read-only flag for a post
+func (p *PostgresDB) setReadOnlyFlag(req FlagRequest) (bool, error) {
+	switch req.Update {
+	case FlagTrue:
+		entry := GormReadOnlyPost{SiteID: req.Locator.SiteID, URL: req.Locator.URL}
+		if err := p.db.Where("site_id = ? AND url = ?", req.Locator.SiteID, req.Locator.URL).
+			FirstOrCreate(&entry).Error; err != nil {
+			return false, fmt.Errorf("failed to set read-only flag: %w", err)
+		}
+		return true, nil
+	case FlagFalse:
+		if err := p.db.Where("site_id = ? AND url = ?", req.Locator.SiteID, req.Locator.URL).
+			Delete(&GormReadOnlyPost{}).Error; err != nil {
+			return false, fmt.Errorf("failed to clear read-only flag: %w", err)
+		}
+		return false, nil
+	}
+	return false, nil
+}
+
+// setVerifiedFlag sets or clears the verified flag for a user
+func (p *PostgresDB) setVerifiedFlag(req FlagRequest) (bool, error) {
+	switch req.Update {
+	case FlagTrue:
+		entry := GormVerifiedUser{SiteID: req.Locator.SiteID, UserID: req.UserID}
+		if err := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).
+			FirstOrCreate(&entry).Error; err != nil {
+			return false, fmt.Errorf("failed to set verified flag: %w", err)
+		}
+		return true, nil
+	case FlagFalse:
+		if err := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).
+			Delete(&GormVerifiedUser{}).Error; err != nil {
+			return false, fmt.Errorf("failed to clear verified flag: %w", err)
+		}
+		return false, nil
+	}
+	return false, nil
+}
+
+// setBlockedFlag sets or clears the blocked flag for a user
+func (p *PostgresDB) setBlockedFlag(req FlagRequest) (bool, error) {
+	switch req.Update {
+	case FlagTrue:
+		until := time.Now().AddDate(100, 0, 0) // permanent block = 100 years
+		if req.TTL > 0 {
+			until = time.Now().Add(req.TTL)
+		}
+		// look up user name from a recent comment
+		userName := ""
+		findReq := FindRequest{Locator: store.Locator{SiteID: req.Locator.SiteID}, UserID: req.UserID, Limit: 1}
+		userComments, err := p.Find(findReq)
+		if err == nil && len(userComments) > 0 {
+			userName = userComments[0].User.Name
+		}
+
+		entry := GormBlockedUser{SiteID: req.Locator.SiteID, UserID: req.UserID, Name: userName, Until: until}
+		// upsert: create or update
+		if err := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).
+			Assign(GormBlockedUser{Until: until, Name: userName}).
+			FirstOrCreate(&entry).Error; err != nil {
+			return false, fmt.Errorf("failed to set blocked flag: %w", err)
+		}
+		return true, nil
+	case FlagFalse:
+		if err := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).
+			Delete(&GormBlockedUser{}).Error; err != nil {
+			return false, fmt.Errorf("failed to clear blocked flag: %w", err)
+		}
+		return false, nil
+	}
+	return false, nil
+}
+
+// ListFlags returns a list of flagged entries for a site.
+// For Verified: returns list of verified user IDs (string).
+// For Blocked: returns list of store.BlockedUser (filtering out expired blocks).
+func (p *PostgresDB) ListFlags(req FlagRequest) ([]interface{}, error) {
+	res := []interface{}{}
+	switch req.Flag {
+	case Verified:
+		var entries []GormVerifiedUser
+		if err := p.db.Where("site_id = ?", req.Locator.SiteID).Find(&entries).Error; err != nil {
+			return nil, fmt.Errorf("failed to list verified users: %w", err)
+		}
+		for _, e := range entries {
+			res = append(res, e.UserID)
+		}
+		return res, nil
+	case Blocked:
+		var entries []GormBlockedUser
+		if err := p.db.Where("site_id = ?", req.Locator.SiteID).Find(&entries).Error; err != nil {
+			return nil, fmt.Errorf("failed to list blocked users: %w", err)
+		}
+		for _, e := range entries {
+			if time.Now().Before(e.Until) {
+				res = append(res, e.ToBlockedUser())
+			}
+		}
+		return res, nil
+	}
+	return nil, fmt.Errorf("flag %s not listable", req.Flag)
+}
+
+// UserDetail gets or sets user detail values.
+// For UserEmail/UserTelegram with Update set: upserts the value, returns the full entry.
+// For UserEmail/UserTelegram without Update: returns the requested detail only.
+// For AllUserDetails without UserID and Update: lists all user details for the site.
+func (p *PostgresDB) UserDetail(req UserDetailRequest) ([]UserDetailEntry, error) {
+	switch req.Detail {
+	case UserEmail, UserTelegram:
+		if req.UserID == "" {
+			return nil, fmt.Errorf("userid cannot be empty in request for single detail")
+		}
+		if req.Update == "" {
+			return p.getUserDetail(req)
+		}
+		return p.setUserDetail(req)
+	case AllUserDetails:
+		if req.Update == "" && req.UserID == "" {
+			return p.listDetails(req.Locator)
+		}
+		return nil, fmt.Errorf("unsupported request with userdetail all")
+	default:
+		return nil, fmt.Errorf("unsupported detail %q", req.Detail)
+	}
+}
+
+// getUserDetail returns the requested single detail for a user
+func (p *PostgresDB) getUserDetail(req UserDetailRequest) ([]UserDetailEntry, error) {
+	var entry GormUserDetail
+	result := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).First(&entry)
+	if result.Error != nil {
+		// no entry found — return empty result (not an error, matching BoltDB behavior)
+		return nil, nil
+	}
+
+	switch req.Detail {
+	case UserEmail:
+		return []UserDetailEntry{{UserID: req.UserID, Email: entry.Email}}, nil
+	case UserTelegram:
+		return []UserDetailEntry{{UserID: req.UserID, Telegram: entry.Telegram}}, nil
+	}
+	return nil, nil
+}
+
+// setUserDetail upserts a single user detail value
+func (p *PostgresDB) setUserDetail(req UserDetailRequest) ([]UserDetailEntry, error) {
+	var entry GormUserDetail
+	result := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).First(&entry)
+	if result.Error != nil {
+		// create new entry
+		entry = GormUserDetail{
+			SiteID: req.Locator.SiteID,
+			UserID: req.UserID,
+		}
+	}
+
+	switch req.Detail {
+	case UserEmail:
+		entry.Email = req.Update
+	case UserTelegram:
+		entry.Telegram = req.Update
+	}
+
+	if result.Error != nil {
+		// new entry — create
+		if err := p.db.Create(&entry).Error; err != nil {
+			return nil, fmt.Errorf("failed to create user detail: %w", err)
+		}
+	} else {
+		// existing entry — save
+		if err := p.db.Save(&entry).Error; err != nil {
+			return nil, fmt.Errorf("failed to update user detail: %w", err)
+		}
+	}
+
+	return []UserDetailEntry{entry.ToUserDetailEntry()}, nil
+}
+
+// listDetails lists all user details for a site
+func (p *PostgresDB) listDetails(loc store.Locator) ([]UserDetailEntry, error) {
+	var entries []GormUserDetail
+	if err := p.db.Where("site_id = ?", loc.SiteID).Find(&entries).Error; err != nil {
+		return nil, fmt.Errorf("failed to list user details: %w", err)
+	}
+
+	result := make([]UserDetailEntry, 0, len(entries))
+	for _, e := range entries {
+		result = append(result, e.ToUserDetailEntry())
+	}
+	return result, nil
 }

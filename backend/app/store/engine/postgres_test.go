@@ -996,3 +996,471 @@ func TestPostgresDB_CreateWithVotesAndEdit(t *testing.T) {
 	assert.True(t, got.Pin)
 	assert.True(t, got.Imported)
 }
+
+func TestPostgresDB_FlagReadOnly(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	loc := store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"}
+
+	// initially not read-only
+	val, err := pg.Flag(FlagRequest{Flag: ReadOnly, Locator: loc})
+	require.NoError(t, err)
+	assert.False(t, val)
+
+	// set read-only
+	val, err = pg.Flag(FlagRequest{Flag: ReadOnly, Locator: loc, Update: FlagTrue})
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// verify it's read-only now
+	val, err = pg.Flag(FlagRequest{Flag: ReadOnly, Locator: loc})
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// setting again should be idempotent
+	val, err = pg.Flag(FlagRequest{Flag: ReadOnly, Locator: loc, Update: FlagTrue})
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// clear read-only
+	val, err = pg.Flag(FlagRequest{Flag: ReadOnly, Locator: loc, Update: FlagFalse})
+	require.NoError(t, err)
+	assert.False(t, val)
+
+	// verify it's no longer read-only
+	val, err = pg.Flag(FlagRequest{Flag: ReadOnly, Locator: loc})
+	require.NoError(t, err)
+	assert.False(t, val)
+
+	// create should work after clearing read-only
+	_, err = pg.Create(store.Comment{
+		ID:        "id-after-ro",
+		Text:      "after ro cleared",
+		Timestamp: time.Now(),
+		Locator:   loc,
+		User:      store.User{ID: "user1", Name: "user name"},
+	})
+	assert.NoError(t, err)
+}
+
+func TestPostgresDB_FlagReadOnlyBlocksCreate(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	loc := store.Locator{URL: "https://radio-t.com/new-post", SiteID: "radio-t"}
+
+	// set read-only
+	_, err := pg.Flag(FlagRequest{Flag: ReadOnly, Locator: loc, Update: FlagTrue})
+	require.NoError(t, err)
+
+	// create should be blocked
+	_, err = pg.Create(store.Comment{
+		ID:        "id-blocked",
+		Text:      "should fail",
+		Timestamp: time.Now(),
+		Locator:   loc,
+		User:      store.User{ID: "user1", Name: "user name"},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "read-only")
+}
+
+func TestPostgresDB_FlagVerified(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	req := FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user1"}
+
+	// initially not verified
+	val, err := pg.Flag(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user1"})
+	require.NoError(t, err)
+	assert.False(t, val)
+
+	// set verified
+	req.Update = FlagTrue
+	val, err = pg.Flag(req)
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// verify it's set
+	req.Update = FlagNonSet
+	val, err = pg.Flag(req)
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// set again (idempotent)
+	req.Update = FlagTrue
+	val, err = pg.Flag(req)
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// clear verified
+	req.Update = FlagFalse
+	val, err = pg.Flag(req)
+	require.NoError(t, err)
+	assert.False(t, val)
+
+	// verify it's cleared
+	req.Update = FlagNonSet
+	val, err = pg.Flag(req)
+	require.NoError(t, err)
+	assert.False(t, val)
+}
+
+func TestPostgresDB_FlagBlocked(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	req := FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user1"}
+
+	// initially not blocked
+	val, err := pg.Flag(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user1"})
+	require.NoError(t, err)
+	assert.False(t, val)
+
+	// block permanently
+	req.Update = FlagTrue
+	val, err = pg.Flag(req)
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// verify blocked
+	req.Update = FlagNonSet
+	val, err = pg.Flag(req)
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// unblock
+	req.Update = FlagFalse
+	val, err = pg.Flag(req)
+	require.NoError(t, err)
+	assert.False(t, val)
+
+	// verify unblocked
+	req.Update = FlagNonSet
+	val, err = pg.Flag(req)
+	require.NoError(t, err)
+	assert.False(t, val)
+}
+
+func TestPostgresDB_FlagBlockedWithTTL(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// block with TTL of 1 hour
+	req := FlagRequest{
+		Flag:    Blocked,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+		Update:  FlagTrue,
+		TTL:     time.Hour,
+	}
+	val, err := pg.Flag(req)
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// should be blocked
+	val, err = pg.Flag(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user1"})
+	require.NoError(t, err)
+	assert.True(t, val)
+
+	// verify the stored Until is approximately 1 hour from now
+	var bu GormBlockedUser
+	err = pg.db.Where("site_id = ? AND user_id = ?", "radio-t", "user1").First(&bu).Error
+	require.NoError(t, err)
+	assert.True(t, bu.Until.After(time.Now()))
+	assert.True(t, bu.Until.Before(time.Now().Add(2*time.Hour)))
+}
+
+func TestPostgresDB_FlagBlockedExpired(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// manually insert an expired block
+	err := pg.db.Create(&GormBlockedUser{
+		SiteID: "radio-t",
+		UserID: "user1",
+		Name:   "user name",
+		Until:  time.Now().Add(-time.Hour), // expired 1 hour ago
+	}).Error
+	require.NoError(t, err)
+
+	// should not be blocked (expired)
+	val, err := pg.Flag(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user1"})
+	require.NoError(t, err)
+	assert.False(t, val)
+}
+
+func TestPostgresDB_FlagBlockedStoresName(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// block user1 who has comments (created by prepPostgres)
+	_, err := pg.Flag(FlagRequest{
+		Flag:    Blocked,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+		Update:  FlagTrue,
+	})
+	require.NoError(t, err)
+
+	// verify name was stored
+	var bu GormBlockedUser
+	err = pg.db.Where("site_id = ? AND user_id = ?", "radio-t", "user1").First(&bu).Error
+	require.NoError(t, err)
+	assert.Equal(t, "user name", bu.Name)
+}
+
+func TestPostgresDB_ListFlagsVerified(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// initially empty
+	res, err := pg.ListFlags(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "radio-t"}})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(res))
+
+	// verify two users
+	_, err = pg.Flag(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user1", Update: FlagTrue})
+	require.NoError(t, err)
+	_, err = pg.Flag(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user2", Update: FlagTrue})
+	require.NoError(t, err)
+
+	res, err = pg.ListFlags(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "radio-t"}})
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(res))
+	// result should contain user IDs as strings
+	ids := make([]string, len(res))
+	for i, v := range res {
+		ids[i] = v.(string)
+	}
+	assert.Contains(t, ids, "user1")
+	assert.Contains(t, ids, "user2")
+
+	// remove one verification
+	_, err = pg.Flag(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user1", Update: FlagFalse})
+	require.NoError(t, err)
+
+	res, err = pg.ListFlags(FlagRequest{Flag: Verified, Locator: store.Locator{SiteID: "radio-t"}})
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(res))
+	assert.Equal(t, "user2", res[0].(string))
+}
+
+func TestPostgresDB_ListFlagsBlocked(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// initially empty
+	res, err := pg.ListFlags(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "radio-t"}})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(res))
+
+	// block two users
+	_, err = pg.Flag(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user1", Update: FlagTrue})
+	require.NoError(t, err)
+	_, err = pg.Flag(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "radio-t"}, UserID: "user2", Update: FlagTrue})
+	require.NoError(t, err)
+
+	res, err = pg.ListFlags(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "radio-t"}})
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(res))
+
+	// verify the entries are store.BlockedUser
+	for _, v := range res {
+		bu, ok := v.(store.BlockedUser)
+		assert.True(t, ok, "expected store.BlockedUser")
+		assert.True(t, bu.Until.After(time.Now()))
+	}
+
+	// add an expired block manually
+	err = pg.db.Create(&GormBlockedUser{
+		SiteID: "radio-t",
+		UserID: "expired-user",
+		Name:   "expired",
+		Until:  time.Now().Add(-time.Hour),
+	}).Error
+	require.NoError(t, err)
+
+	// expired block should be filtered out
+	res, err = pg.ListFlags(FlagRequest{Flag: Blocked, Locator: store.Locator{SiteID: "radio-t"}})
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(res), "expired block should not be listed")
+}
+
+func TestPostgresDB_ListFlagsUnsupported(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	_, err := pg.ListFlags(FlagRequest{Flag: ReadOnly, Locator: store.Locator{SiteID: "radio-t"}})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not listable")
+}
+
+func TestPostgresDB_UserDetailGetSet(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// get non-existent detail — should return nil (not error)
+	res, err := pg.UserDetail(UserDetailRequest{
+		Detail:  UserEmail,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, res)
+
+	// set email
+	res, err = pg.UserDetail(UserDetailRequest{
+		Detail:  UserEmail,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+		Update:  "test@example.com",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res))
+	assert.Equal(t, "user1", res[0].UserID)
+	assert.Equal(t, "test@example.com", res[0].Email)
+
+	// get email
+	res, err = pg.UserDetail(UserDetailRequest{
+		Detail:  UserEmail,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res))
+	assert.Equal(t, "test@example.com", res[0].Email)
+	assert.Equal(t, "", res[0].Telegram, "telegram should be empty when requesting email")
+
+	// set telegram
+	res, err = pg.UserDetail(UserDetailRequest{
+		Detail:  UserTelegram,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+		Update:  "@testuser",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res))
+	assert.Equal(t, "@testuser", res[0].Telegram)
+	assert.Equal(t, "test@example.com", res[0].Email, "email should be preserved")
+
+	// get telegram
+	res, err = pg.UserDetail(UserDetailRequest{
+		Detail:  UserTelegram,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res))
+	assert.Equal(t, "@testuser", res[0].Telegram)
+	assert.Equal(t, "", res[0].Email, "email should be empty when requesting telegram")
+
+	// update email to new value
+	res, err = pg.UserDetail(UserDetailRequest{
+		Detail:  UserEmail,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+		Update:  "new@example.com",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res))
+	assert.Equal(t, "new@example.com", res[0].Email)
+}
+
+func TestPostgresDB_UserDetailEmptyUserID(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	_, err := pg.UserDetail(UserDetailRequest{
+		Detail:  UserEmail,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "userid cannot be empty")
+}
+
+func TestPostgresDB_UserDetailList(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// initially empty
+	res, err := pg.UserDetail(UserDetailRequest{
+		Detail:  AllUserDetails,
+		Locator: store.Locator{SiteID: "radio-t"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(res))
+
+	// set details for two users
+	_, err = pg.UserDetail(UserDetailRequest{
+		Detail:  UserEmail,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+		Update:  "user1@example.com",
+	})
+	require.NoError(t, err)
+
+	_, err = pg.UserDetail(UserDetailRequest{
+		Detail:  UserEmail,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user2",
+		Update:  "user2@example.com",
+	})
+	require.NoError(t, err)
+
+	_, err = pg.UserDetail(UserDetailRequest{
+		Detail:  UserTelegram,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+		Update:  "@u1",
+	})
+	require.NoError(t, err)
+
+	// list all
+	res, err = pg.UserDetail(UserDetailRequest{
+		Detail:  AllUserDetails,
+		Locator: store.Locator{SiteID: "radio-t"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(res))
+
+	// find user1 in results
+	var u1Found bool
+	for _, e := range res {
+		if e.UserID == "user1" {
+			assert.Equal(t, "user1@example.com", e.Email)
+			assert.Equal(t, "@u1", e.Telegram)
+			u1Found = true
+		}
+	}
+	assert.True(t, u1Found, "user1 should be in the list")
+}
+
+func TestPostgresDB_UserDetailUnsupported(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	_, err := pg.UserDetail(UserDetailRequest{
+		Detail:  UserDetail("unsupported"),
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported detail")
+}
+
+func TestPostgresDB_UserDetailAllWithUserID(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	_, err := pg.UserDetail(UserDetailRequest{
+		Detail:  AllUserDetails,
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported request")
+}
