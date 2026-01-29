@@ -3,8 +3,10 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
+	"time"
 
 	gojwt "github.com/golang-jwt/jwt/v5"
 	log "github.com/go-pkgz/lgr"
@@ -104,7 +106,11 @@ func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) (fu
 				http.Error(w, "failed to create auth token", http.StatusInternalServerError)
 				return
 			}
-			r = token.SetUserInfo(r, user)
+			if tokenCreator == nil {
+				// only set user info directly when no internal token is created;
+				// otherwise the downstream auth middleware sets it from the internal token
+				r = token.SetUserInfo(r, user)
+			}
 			next.ServeHTTP(w, r)
 		})
 	}, nil
@@ -140,7 +146,9 @@ func ForwardAuthMiddleware(cfg ForwardAuthConfig, tokenCreator internalTokenCrea
 				http.Error(w, "failed to create auth token", http.StatusInternalServerError)
 				return
 			}
-			r = token.SetUserInfo(r, user)
+			if tokenCreator == nil {
+				r = token.SetUserInfo(r, user)
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -156,14 +164,17 @@ func setInternalToken(r *http.Request, user token.User, tc internalTokenCreator)
 	// extract site ID from the request query parameter to use as the audience for the internal token
 	siteID := r.URL.Query().Get("site")
 	if siteID == "" {
-		siteID = "remark42" // default site ID
+		siteID = "remark" // default site ID, matches --site flag default
 	}
 
+	now := time.Now()
 	claims := token.Claims{
 		User: &user,
 	}
 	claims.Audience = []string{siteID}
 	claims.Issuer = "remark42"
+	claims.ExpiresAt = gojwt.NewNumericDate(now.Add(time.Minute))
+	claims.NotBefore = gojwt.NewNumericDate(now.Add(-1 * time.Minute))
 
 	tkn, err := tc.Token(claims)
 	if err != nil {
@@ -197,17 +208,24 @@ func extractUser(claims map[string]interface{}, m FieldMappings, prefix string) 
 	return user, nil
 }
 
-// claimStr extracts a string value from a claims map; returns empty string if missing or not a string
+// claimStr extracts a string value from a claims map; returns empty string if missing or not a string.
+// Numeric values (float64 from JSON) are formatted without scientific notation.
 func claimStr(claims map[string]interface{}, key string) string {
 	v, ok := claims[key]
 	if !ok {
 		return ""
 	}
-	s, ok := v.(string)
-	if !ok {
+	switch val := v.(type) {
+	case string:
+		return val
+	case float64:
+		if val == math.Trunc(val) {
+			return fmt.Sprintf("%.0f", val)
+		}
+		return fmt.Sprintf("%v", val)
+	default:
 		return fmt.Sprintf("%v", v)
 	}
-	return s
 }
 
 // makeKeyFunc creates a jwt.Keyfunc for the given algorithm and secret/key material

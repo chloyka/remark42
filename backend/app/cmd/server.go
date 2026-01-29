@@ -684,6 +684,14 @@ func (s *ServerCommand) newServerApp(ctx context.Context) (*serverApp, error) {
 			return nil, fmt.Errorf("invalid JWT auth configuration: %w", err)
 		}
 	}
+	if s.Auth.Forward.Header != "" {
+		if s.Auth.Forward.Header == "X-JWT" {
+			_ = dataService.Close()
+			_ = authRefreshCache.Close()
+			return nil, fmt.Errorf("AUTH_FORWARD_HEADER cannot be 'X-JWT' as it conflicts with remark42's internal auth header")
+		}
+		log.Printf("[WARN] forward auth enabled - ensure your reverse proxy strips the %q header from client requests", s.Auth.Forward.Header)
+	}
 
 	var devAuth *provider.DevAuthServer
 	if s.Auth.Dev {
