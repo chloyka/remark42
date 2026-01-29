@@ -354,6 +354,7 @@ func (s *ServerCommand) Execute(_ []string) error {
 		"TELEGRAM_TOKEN",
 		"SMTP_PASSWORD",
 		"ADMIN_PASSWD",
+		"STORE_POSTGRES_DSN",
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())

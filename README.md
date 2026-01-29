@@ -17,7 +17,7 @@ Remark42 is a self-hosted, lightweight and simple (yet functional) comment engin
 * Telegram, Slack, Webhook and email notifications for Admins (get notified for each new comment)
 * Email and Telegram notifications for users (get notified when someone responds to your comment)
 * Export data to JSON with automatic backups
-* No external databases, everything embedded in a single data file
+* Embedded BoltDB storage by default (no external database required), with optional PostgreSQL backend
 * Fully dockerized and can be deployed in a single command
 * Self-contained executable can be deployed directly to Linux, Windows and macOS
 * Clean, lightweight and customizable UI with white and dark themes

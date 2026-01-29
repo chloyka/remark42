@@ -65,7 +65,11 @@ func (p *PostgresDB) Close() error {
 // It checks read-only status, rejects duplicates, inserts the comment, and upserts post info.
 func (p *PostgresDB) Create(comment store.Comment) (string, error) {
 	// check if the post is read-only
-	if p.isReadOnly(comment.Locator) {
+	ro, err := p.isReadOnly(comment.Locator)
+	if err != nil {
+		return "", fmt.Errorf("failed to check read-only for %s: %w", comment.Locator.URL, err)
+	}
+	if ro {
 		return "", fmt.Errorf("post %s is read-only", comment.Locator.URL)
 	}
 
@@ -102,10 +106,10 @@ func (p *PostgresDB) upsertPostInfo(comment store.Comment) error {
 		return fmt.Errorf("failed to count comments for post info: %w", err)
 	}
 
-	// get first and last timestamps
+	// get first and last timestamps for non-deleted comments
 	var firstTS, lastTS time.Time
 	row := p.db.Model(&GormComment{}).
-		Where("site_id = ? AND url = ?", comment.Locator.SiteID, comment.Locator.URL).
+		Where("site_id = ? AND url = ? AND deleted = ?", comment.Locator.SiteID, comment.Locator.URL, false).
 		Select("MIN(timestamp), MAX(timestamp)").Row()
 	if err := row.Scan(&firstTS, &lastTS); err != nil {
 		return fmt.Errorf("failed to get timestamps for post info: %w", err)
@@ -285,10 +289,12 @@ func (p *PostgresDB) deleteUserDetail(siteID, userID string, detail UserDetail) 
 }
 
 // isReadOnly checks if a post is in the readonly_posts table
-func (p *PostgresDB) isReadOnly(locator store.Locator) bool {
+func (p *PostgresDB) isReadOnly(locator store.Locator) (bool, error) {
 	var count int64
-	p.db.Model(&GormReadOnlyPost{}).Where("site_id = ? AND url = ?", locator.SiteID, locator.URL).Count(&count)
-	return count > 0
+	if err := p.db.Model(&GormReadOnlyPost{}).Where("site_id = ? AND url = ?", locator.SiteID, locator.URL).Count(&count).Error; err != nil {
+		return false, fmt.Errorf("failed to check read-only status: %w", err)
+	}
+	return count > 0, nil
 }
 
 // Find returns comments matching the request.
@@ -296,36 +302,44 @@ func (p *PostgresDB) isReadOnly(locator store.Locator) bool {
 func (p *PostgresDB) Find(req FindRequest) ([]store.Comment, error) {
 	comments := []store.Comment{}
 
+	var err error
 	switch {
 	case req.Locator.SiteID != "" && req.Locator.URL != "": // find post comments
-		comments = p.findForPost(req)
+		comments, err = p.findForPost(req)
+		if err != nil {
+			return nil, err
+		}
 	case req.Locator.SiteID != "" && req.UserID != "": // find comments for user
-		var err error
 		comments, err = p.findForUser(req)
 		if err != nil {
 			return nil, err
 		}
 	case req.Locator.SiteID != "" && req.Locator.URL == "" && req.UserID == "": // find last comments for site
-		comments = p.findLastForSite(req)
+		comments, err = p.findLastForSite(req)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return SortComments(comments, req.Sort), nil
 }
 
 // findForPost retrieves all comments for a specific post, optionally filtering by Since.
-func (p *PostgresDB) findForPost(req FindRequest) []store.Comment {
+func (p *PostgresDB) findForPost(req FindRequest) ([]store.Comment, error) {
 	var gormComments []GormComment
 	query := p.db.Where("site_id = ? AND url = ?", req.Locator.SiteID, req.Locator.URL)
 	if !req.Since.IsZero() {
 		query = query.Where("timestamp > ?", req.Since)
 	}
-	query.Find(&gormComments)
+	if err := query.Find(&gormComments).Error; err != nil {
+		return nil, fmt.Errorf("failed to find comments for post %s: %w", req.Locator.URL, err)
+	}
 
 	comments := make([]store.Comment, 0, len(gormComments))
 	for _, gc := range gormComments {
 		comments = append(comments, gc.ToComment())
 	}
-	return comments
+	return comments, nil
 }
 
 // findForUser retrieves comments by user for a site, with limit and skip.
@@ -354,7 +368,7 @@ func (p *PostgresDB) findForUser(req FindRequest) ([]store.Comment, error) {
 }
 
 // findLastForSite retrieves last N comments for a site, excluding deleted, optionally filtering by Since.
-func (p *PostgresDB) findLastForSite(req FindRequest) []store.Comment {
+func (p *PostgresDB) findLastForSite(req FindRequest) ([]store.Comment, error) {
 	limit := req.Limit
 	if limit == 0 || limit > lastLimit {
 		limit = lastLimit
@@ -367,13 +381,15 @@ func (p *PostgresDB) findLastForSite(req FindRequest) []store.Comment {
 		query = query.Where("timestamp > ?", req.Since)
 	}
 	query = query.Limit(limit)
-	query.Find(&gormComments)
+	if err := query.Find(&gormComments).Error; err != nil {
+		return nil, fmt.Errorf("failed to find last comments for site %s: %w", req.Locator.SiteID, err)
+	}
 
 	comments := make([]store.Comment, 0, len(gormComments))
 	for _, gc := range gormComments {
 		comments = append(comments, gc.ToComment())
 	}
-	return comments
+	return comments, nil
 }
 
 // Count returns the number of comments matching the find criteria.
@@ -429,8 +445,14 @@ func (p *PostgresDB) infoForPost(req InfoRequest) ([]store.PostInfo, error) {
 	}
 
 	// also check manual read-only flag
-	if !info.ReadOnly && p.isReadOnly(req.Locator) {
-		info.ReadOnly = true
+	if !info.ReadOnly {
+		ro, roErr := p.isReadOnly(req.Locator)
+		if roErr != nil {
+			return nil, fmt.Errorf("failed to check read-only for %s: %w", req.Locator.URL, roErr)
+		}
+		if ro {
+			info.ReadOnly = true
+		}
 	}
 
 	return []store.PostInfo{info}, nil
@@ -462,29 +484,34 @@ func (p *PostgresDB) infoForSite(req InfoRequest) ([]store.PostInfo, error) {
 // When Update is FlagTrue or FlagFalse, it sets the value (set mode).
 func (p *PostgresDB) Flag(req FlagRequest) (bool, error) {
 	if req.Update == FlagNonSet {
-		return p.checkFlag(req), nil
+		return p.checkFlag(req)
 	}
 	return p.setFlag(req)
 }
 
 // checkFlag returns the current value of a flag
-func (p *PostgresDB) checkFlag(req FlagRequest) bool {
+func (p *PostgresDB) checkFlag(req FlagRequest) (bool, error) {
 	switch req.Flag {
 	case ReadOnly:
 		return p.isReadOnly(req.Locator)
 	case Verified:
 		var count int64
-		p.db.Model(&GormVerifiedUser{}).Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).Count(&count)
-		return count > 0
+		if err := p.db.Model(&GormVerifiedUser{}).Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).Count(&count).Error; err != nil {
+			return false, fmt.Errorf("failed to check verified flag: %w", err)
+		}
+		return count > 0, nil
 	case Blocked:
 		var bu GormBlockedUser
 		result := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).First(&bu)
 		if result.Error != nil {
-			return false
+			if result.Error == gorm.ErrRecordNotFound {
+				return false, nil
+			}
+			return false, fmt.Errorf("failed to check blocked flag: %w", result.Error)
 		}
-		return time.Now().Before(bu.Until)
+		return time.Now().Before(bu.Until), nil
 	}
-	return false
+	return false, nil
 }
 
 // setFlag sets a flag value and returns the resulting state

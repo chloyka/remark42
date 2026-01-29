@@ -166,70 +166,51 @@ func TestGormModel_CommentEmptyCollections(t *testing.T) {
 	assert.Nil(t, roundTripped.VotedIPs)
 }
 
-func TestGormModel_PostInfoRoundTrip(t *testing.T) {
+func TestGormModel_PostInfoToPostInfo(t *testing.T) {
 	ts1 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	ts2 := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 
-	original := store.PostInfo{
-		URL:      "http://example.com/post/1",
-		Count:    42,
-		ReadOnly: true,
-		FirstTS:  ts1,
-		LastTS:   ts2,
+	gpi := GormPostInfo{
+		URL:    "http://example.com/post/1",
+		SiteID: "site-1",
+		Count:  42,
+		FirstTS: ts1,
+		LastTS:  ts2,
 	}
 
-	gormPostInfo := FromPostInfo(original, "site-1")
-	assert.Equal(t, "http://example.com/post/1", gormPostInfo.URL)
-	assert.Equal(t, "site-1", gormPostInfo.SiteID)
-	assert.Equal(t, 42, gormPostInfo.Count)
-	assert.True(t, gormPostInfo.ReadOnly)
-	assert.Equal(t, ts1, gormPostInfo.FirstTS)
-	assert.Equal(t, ts2, gormPostInfo.LastTS)
-
-	roundTripped := gormPostInfo.ToPostInfo()
-	assert.Equal(t, original.URL, roundTripped.URL)
-	assert.Equal(t, original.Count, roundTripped.Count)
-	assert.Equal(t, original.ReadOnly, roundTripped.ReadOnly)
-	assert.Equal(t, original.FirstTS, roundTripped.FirstTS)
-	assert.Equal(t, original.LastTS, roundTripped.LastTS)
+	result := gpi.ToPostInfo()
+	assert.Equal(t, "http://example.com/post/1", result.URL)
+	assert.Equal(t, 42, result.Count)
+	assert.Equal(t, ts1, result.FirstTS)
+	assert.Equal(t, ts2, result.LastTS)
 }
 
-func TestGormModel_BlockedUserRoundTrip(t *testing.T) {
+func TestGormModel_BlockedUserToBlockedUser(t *testing.T) {
 	until := time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
 
-	original := store.BlockedUser{
-		ID:    "user-bad",
-		Name:  "Bad User",
-		Until: until,
+	gbu := GormBlockedUser{
+		SiteID: "site-1",
+		UserID: "user-bad",
+		Name:   "Bad User",
+		Until:  until,
 	}
 
-	gormBlocked := FromBlockedUser(original, "site-1")
-	assert.Equal(t, "site-1", gormBlocked.SiteID)
-	assert.Equal(t, "user-bad", gormBlocked.UserID)
-	assert.Equal(t, "Bad User", gormBlocked.Name)
-	assert.Equal(t, until, gormBlocked.Until)
-
-	roundTripped := gormBlocked.ToBlockedUser()
-	assert.Equal(t, original.ID, roundTripped.ID)
-	assert.Equal(t, original.Name, roundTripped.Name)
-	assert.Equal(t, original.Until, roundTripped.Until)
+	result := gbu.ToBlockedUser()
+	assert.Equal(t, "user-bad", result.ID)
+	assert.Equal(t, "Bad User", result.Name)
+	assert.Equal(t, until, result.Until)
 }
 
-func TestGormModel_UserDetailRoundTrip(t *testing.T) {
-	original := UserDetailEntry{
+func TestGormModel_UserDetailToUserDetailEntry(t *testing.T) {
+	gud := GormUserDetail{
+		SiteID:   "site-1",
 		UserID:   "user-1",
 		Email:    "user@example.com",
 		Telegram: "@testuser",
 	}
 
-	gormDetail := FromUserDetailEntry(original, "site-1")
-	assert.Equal(t, "site-1", gormDetail.SiteID)
-	assert.Equal(t, "user-1", gormDetail.UserID)
-	assert.Equal(t, "user@example.com", gormDetail.Email)
-	assert.Equal(t, "@testuser", gormDetail.Telegram)
-
-	roundTripped := gormDetail.ToUserDetailEntry()
-	assert.Equal(t, original.UserID, roundTripped.UserID)
-	assert.Equal(t, original.Email, roundTripped.Email)
-	assert.Equal(t, original.Telegram, roundTripped.Telegram)
+	result := gud.ToUserDetailEntry()
+	assert.Equal(t, "user-1", result.UserID)
+	assert.Equal(t, "user@example.com", result.Email)
+	assert.Equal(t, "@testuser", result.Telegram)
 }

@@ -1,6 +1,6 @@
 # GORM/PostgreSQL Storage Engine for Remark42
 
-Implement a new storage engine backed by PostgreSQL via GORM, as an alternative to BoltDB. Add `STORAGE_TYPE` and `POSTGRES_DSN` environment variables. On startup, run GORM AutoMigrate; if migration succeeds, start the server. Use GORM models for all CRUD operations.
+Implement a new storage engine backed by PostgreSQL via GORM, as an alternative to BoltDB. Add `STORE_TYPE=postgres` and `STORE_POSTGRES_DSN` environment variables. On startup, run GORM AutoMigrate; if migration succeeds, start the server. Use GORM models for all CRUD operations.
 
 ## Context
 

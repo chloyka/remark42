@@ -37,14 +37,14 @@ type GormComment struct {
 // TableName overrides the table name
 func (GormComment) TableName() string { return "comments" }
 
-// GormPostInfo maps to the "post_info" table
+// GormPostInfo maps to the "post_info" table.
+// Note: read-only status is tracked in the separate readonly_posts table, not here.
 type GormPostInfo struct {
-	URL      string    `gorm:"column:url;primaryKey"`
-	SiteID   string    `gorm:"column:site_id;primaryKey"`
-	Count    int       `gorm:"column:count"`
-	ReadOnly bool      `gorm:"column:read_only"`
-	FirstTS  time.Time `gorm:"column:first_ts"`
-	LastTS   time.Time `gorm:"column:last_ts"`
+	URL    string    `gorm:"column:url;primaryKey"`
+	SiteID string    `gorm:"column:site_id;primaryKey"`
+	Count  int       `gorm:"column:count"`
+	FirstTS time.Time `gorm:"column:first_ts"`
+	LastTS  time.Time `gorm:"column:last_ts"`
 }
 
 // TableName overrides the table name
@@ -179,23 +179,10 @@ func FromComment(c store.Comment) GormComment {
 // ToPostInfo converts GormPostInfo to store.PostInfo
 func (g *GormPostInfo) ToPostInfo() store.PostInfo {
 	return store.PostInfo{
-		URL:      g.URL,
-		Count:    g.Count,
-		ReadOnly: g.ReadOnly,
-		FirstTS:  g.FirstTS,
-		LastTS:   g.LastTS,
-	}
-}
-
-// FromPostInfo converts store.PostInfo to GormPostInfo for a given siteID
-func FromPostInfo(p store.PostInfo, siteID string) GormPostInfo {
-	return GormPostInfo{
-		URL:      p.URL,
-		SiteID:   siteID,
-		Count:    p.Count,
-		ReadOnly: p.ReadOnly,
-		FirstTS:  p.FirstTS,
-		LastTS:   p.LastTS,
+		URL:     g.URL,
+		Count:   g.Count,
+		FirstTS: g.FirstTS,
+		LastTS:  g.LastTS,
 	}
 }
 
@@ -208,16 +195,6 @@ func (g *GormBlockedUser) ToBlockedUser() store.BlockedUser {
 	}
 }
 
-// FromBlockedUser converts store.BlockedUser to GormBlockedUser for a given siteID
-func FromBlockedUser(b store.BlockedUser, siteID string) GormBlockedUser {
-	return GormBlockedUser{
-		SiteID: siteID,
-		UserID: b.ID,
-		Name:   b.Name,
-		Until:  b.Until,
-	}
-}
-
 // ToUserDetailEntry converts GormUserDetail to UserDetailEntry
 func (g *GormUserDetail) ToUserDetailEntry() UserDetailEntry {
 	return UserDetailEntry{
@@ -227,12 +204,3 @@ func (g *GormUserDetail) ToUserDetailEntry() UserDetailEntry {
 	}
 }
 
-// FromUserDetailEntry converts UserDetailEntry to GormUserDetail for a given siteID
-func FromUserDetailEntry(e UserDetailEntry, siteID string) GormUserDetail {
-	return GormUserDetail{
-		SiteID:   siteID,
-		UserID:   e.UserID,
-		Email:    e.Email,
-		Telegram: e.Telegram,
-	}
-}

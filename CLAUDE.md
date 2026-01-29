@@ -8,6 +8,7 @@
 - **Backend Testing**:
   - Run all tests: `cd backend/app && go test -timeout=60s -count 1 ./...`
   - Run single test: `cd backend/app && go test -run TestName ./path/to/package`
+  - **PostgreSQL tests**: Require `TEST_POSTGRES_DSN` env var pointing to a running PostgreSQL instance; tests skip automatically if not set
   - **IMPORTANT**: Run example tests: `cd backend/_example/memory_store && go test -race ./... && go build -race ./...`
 - **Frontend**:
   - Development: `cd frontend && pnpm dev:app`
@@ -30,7 +31,8 @@
 - **Logging**: `github.com/go-pkgz/lgr`
 - **Testing**: `github.com/stretchr/testify`
 - **Notifications**: `github.com/go-pkgz/notify`
+- **Storage (PostgreSQL)**: `gorm.io/gorm`, `gorm.io/driver/postgres`
 
 ## Repository Structure
-- Backend: Go server using BoltDB for storage
+- Backend: Go server using BoltDB (default) or PostgreSQL (via GORM) for storage
 - Frontend: Preact/Redux-based UI with iframe embedding
