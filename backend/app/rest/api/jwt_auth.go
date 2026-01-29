@@ -123,11 +123,20 @@ func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) (fu
 func ForwardAuthMiddleware(cfg ForwardAuthConfig, tokenCreator internalTokenCreator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// skip if the request was already authenticated by another external auth middleware (e.g., JWT)
+			if r.Header.Get("X-JWT") != "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			headerVal := r.Header.Get(cfg.Header)
 			if headerVal == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
+
+			// strip the forward-auth header to prevent leaking user claims downstream
+			r.Header.Del(cfg.Header)
 
 			var payload map[string]interface{}
 			if err := json.Unmarshal([]byte(headerVal), &payload); err != nil {

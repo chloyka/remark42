@@ -714,7 +714,7 @@ func TestExtractUser(t *testing.T) {
 func TestClaimStr(t *testing.T) {
 	claims := map[string]interface{}{
 		"string_val": "hello",
-		"int_val":    42,
+		"int_val":    float64(42), // JSON always unmarshals numbers as float64
 		"float_val":  3.14,
 		"bool_val":   true,
 	}

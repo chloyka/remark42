@@ -153,6 +153,7 @@ User IDs from JWT authentication are prefixed with `jwt_`. For example, if the `
 
 #### Notes
 
+- The external JWT **must** include an `exp` (expiration) claim. Tokens without an expiry are rejected. If your SSO system issues long-lived tokens, ensure they still contain an `exp` claim.
 - The header value may optionally include a `Bearer ` prefix (e.g., `Authorization: Bearer <token>`), which is automatically stripped before parsing.
 
 #### Example: Traefik with Authelia

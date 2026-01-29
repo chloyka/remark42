@@ -673,6 +673,11 @@ func (s *ServerCommand) newServerApp(ctx context.Context) (*serverApp, error) {
 
 	// validate JWT/forward-auth configuration early to prevent silent startup failures
 	if s.Auth.JWT.Secret != "" {
+		if s.Auth.JWT.Header == "" {
+			_ = dataService.Close()
+			_ = authRefreshCache.Close()
+			return nil, fmt.Errorf("AUTH_JWT_HEADER cannot be empty when AUTH_JWT_SECRET is set")
+		}
 		if strings.EqualFold(s.Auth.JWT.Header, "X-JWT") {
 			_ = dataService.Close()
 			_ = authRefreshCache.Close()
