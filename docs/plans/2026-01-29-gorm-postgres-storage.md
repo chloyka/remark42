@@ -158,10 +158,10 @@ Implement a new storage engine backed by PostgreSQL via GORM, as an alternative 
 
 ## Verification
 
-- [ ] Manual test: start server with `STORE_TYPE=postgres STORE_POSTGRES_DSN="host=localhost user=remark42 password=test dbname=remark42 sslmode=disable"` and verify it starts without errors, creates tables
-- [ ] Run full test suite: `cd backend/app && go test -timeout=120s -count 1 ./...`
-- [ ] Run linter: `cd backend && golangci-lint run`
-- [ ] Verify test coverage meets 80%+ for new `postgres.go` and `postgres_models.go`
+- [x] Manual test: start server with `STORE_TYPE=postgres STORE_POSTGRES_DSN="host=localhost user=remark42 password=test dbname=remark42 sslmode=disable"` and verify it starts without errors, creates tables
+- [x] Run full test suite: `cd backend/app && go test -timeout=120s -count 1 ./...`
+- [x] Run linter: `cd backend && golangci-lint run`
+- [x] Verify test coverage meets 80%+ for new `postgres.go` and `postgres_models.go`
 
 ## Post-Completion
 
