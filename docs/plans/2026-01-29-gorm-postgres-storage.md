@@ -62,24 +62,24 @@ Implement a new storage engine backed by PostgreSQL via GORM, as an alternative 
 **Files:**
 - Modify: `backend/app/store/engine/postgres.go`
 
-- [ ] Implement `Create(comment store.Comment) (string, error)`:
+- [x] Implement `Create(comment store.Comment) (string, error)`:
   - Convert to `GormComment`, insert with `db.Create()`
   - Check read-only status before creating
   - Update post info (count, timestamps) — upsert `GormPostInfo`
   - Return comment ID
-- [ ] Implement `Get(req GetRequest) (store.Comment, error)`:
+- [x] Implement `Get(req GetRequest) (store.Comment, error)`:
   - Query by `id`, `site_id`, `url`
   - Convert back to `store.Comment`
-- [ ] Implement `Update(comment store.Comment) error`:
+- [x] Implement `Update(comment store.Comment) error`:
   - Update mutable fields only: `Text`, `Orig`, `Score`, `Votes`, `VotedIPs`, `Vote`, `Controversy`, `Pin`, `Deleted`, `EditTimestamp`, `EditSummary`, `PostTitle`
-- [ ] Implement `Delete(req DeleteRequest) error`:
+- [x] Implement `Delete(req DeleteRequest) error`:
   - Handle all delete modes: single comment soft/hard delete, delete all user comments, delete user detail, delete all site data
   - For comment delete: apply `SetDeleted()` logic then update
   - For site delete: delete all comments, post_info, flags, user_details for the site
   - For user delete: soft/hard delete all user comments for site
   - For user detail delete: remove user_detail entry
-- [ ] Write tests for Create, Get, Update, Delete — mirror `TestBoltDB_CreateAndFind`, `TestBoltDB_Get`, `TestBoltDB_Update`, `TestBoltDB_Delete` patterns
-- [ ] Run `cd backend/app/store/engine && go test -run TestPostgresDB -count 1 ./...` — must pass before task 4
+- [x] Write tests for Create, Get, Update, Delete — mirror `TestBoltDB_CreateAndFind`, `TestBoltDB_Get`, `TestBoltDB_Update`, `TestBoltDB_Delete` patterns
+- [x] Run `cd backend/app/store/engine && go test -run TestPostgresDB -count 1 ./...` — must pass before task 4
 
 ## Task 4: Implement Find, Count, Info methods
 
