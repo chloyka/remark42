@@ -205,4 +205,4 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
 
 ## Post-Completion
 
-- [ ] Move this plan to `docs/plans/completed/`
+- [x] Move this plan to `docs/plans/completed/`
