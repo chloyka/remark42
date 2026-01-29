@@ -47,15 +47,15 @@ Implement a new storage engine backed by PostgreSQL via GORM, as an alternative 
 **Files:**
 - Create: `backend/app/store/engine/postgres.go`
 
-- [ ] Create `PostgresDB` struct with `db *gorm.DB` field
-- [ ] Implement `NewPostgresDB(dsn string, sites []string) (*PostgresDB, error)`:
+- [x] Create `PostgresDB` struct with `db *gorm.DB` field
+- [x] Implement `NewPostgresDB(dsn string, sites []string) (*PostgresDB, error)`:
   - Open GORM connection with `gorm.Open(postgres.Open(dsn), &gorm.Config{})`
   - Run `db.AutoMigrate(...)` for all GORM models
   - Verify connectivity with `db.Raw("SELECT 1").Scan(...)`
   - Return `*PostgresDB`
-- [ ] Implement `Close() error` — get underlying `*sql.DB` and close it
-- [ ] Write test `TestPostgresDB_NewAndClose` — connects to test DB, verifies AutoMigrate runs, closes. Skip if no `TEST_POSTGRES_DSN`
-- [ ] Run `cd backend/app/store/engine && go test -run TestPostgresDB_New -count 1 ./...` — must pass before task 3
+- [x] Implement `Close() error` — get underlying `*sql.DB` and close it
+- [x] Write test `TestPostgresDB_NewAndClose` — connects to test DB, verifies AutoMigrate runs, closes. Skip if no `TEST_POSTGRES_DSN`
+- [x] Run `cd backend/app/store/engine && go test -run TestPostgresDB_New -count 1 ./...` — must pass before task 3
 
 ## Task 3: Implement Create, Get, Update, Delete methods
 
