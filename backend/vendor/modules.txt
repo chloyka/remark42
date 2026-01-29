@@ -132,9 +132,21 @@ github.com/hashicorp/golang-lru/v2
 github.com/hashicorp/golang-lru/v2/expirable
 github.com/hashicorp/golang-lru/v2/internal
 github.com/hashicorp/golang-lru/v2/simplelru
+# github.com/jackc/pgpassfile v1.0.0
+## explicit; go 1.12
+# github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+## explicit; go 1.14
+# github.com/jackc/pgx/v5 v5.6.0
+## explicit; go 1.20
+# github.com/jackc/puddle/v2 v2.2.2
+## explicit; go 1.19
 # github.com/jessevdk/go-flags v1.6.1
 ## explicit; go 1.20
 github.com/jessevdk/go-flags
+# github.com/jinzhu/inflection v1.0.0
+## explicit
+# github.com/jinzhu/now v1.1.5
+## explicit; go 1.12
 # github.com/klauspost/compress v1.18.2
 ## explicit; go 1.23
 github.com/klauspost/compress
@@ -328,3 +340,7 @@ golang.org/x/text/unicode/norm
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
+# gorm.io/driver/postgres v1.6.0
+## explicit; go 1.20
+# gorm.io/gorm v1.31.1
+## explicit; go 1.18
