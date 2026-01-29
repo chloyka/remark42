@@ -8,7 +8,7 @@ Most of the parameters have sane defaults and don't require customization. There
 
 1. `SECRET` - secret key, can be any long and hard-to-guess string
 2. `REMARK_URL` - URL pointing to your Remark42 server, i.e., `https://demo.remark42.com`
-3. At least one pair of `AUTH_<PROVIDER>_CID` and `AUTH_<PROVIDER>_CSEC` defining OAuth2 provider(s)
+3. At least one authentication provider: an `AUTH_<PROVIDER>_CID`/`AUTH_<PROVIDER>_CSEC` pair for OAuth2, `AUTH_JWT_SECRET` for JWT auth, `AUTH_FORWARD_HEADER` for forward-auth, `AUTH_EMAIL_ENABLE=true` for email auth, or `AUTH_ANON=true` for anonymous access
 
 The minimal `docker-compose.yml` has to include all required parameters:
 

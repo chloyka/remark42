@@ -8,7 +8,7 @@ import { setItem, getItem } from 'common/local-storage';
 import { LS_EMAIL_KEY } from 'common/constants';
 
 /** Providers that handle auth externally and render no UI */
-const TRANSPARENT_PROVIDERS: string[] = ['jwt', 'forward_auth'];
+const TRANSPARENT_PROVIDERS: string[] = ['jwt', 'forward'];
 
 export function getProviders(): [OAuthProvider[], FormProvider[]] {
   const oauthProviders: OAuthProvider[] = [];

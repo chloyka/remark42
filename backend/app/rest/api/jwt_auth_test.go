@@ -74,6 +74,14 @@ func captureUserHandler(t *testing.T, captured *token.User, called *bool) http.H
 	})
 }
 
+// requireJWTMiddleware is a helper that creates JWTAuthMiddleware and fails the test on error
+func requireJWTMiddleware(t *testing.T, cfg JWTAuthConfig) func(http.Handler) http.Handler {
+	t.Helper()
+	mw, err := JWTAuthMiddleware(cfg, nil)
+	require.NoError(t, err)
+	return mw
+}
+
 func TestJWTAuthMiddleware_ValidHS256Token(t *testing.T) {
 	cfg := defaultJWTConfig()
 
@@ -88,7 +96,7 @@ func TestJWTAuthMiddleware_ValidHS256Token(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -104,6 +112,31 @@ func TestJWTAuthMiddleware_ValidHS256Token(t *testing.T) {
 	assert.False(t, captured.IsAdmin())
 }
 
+func TestJWTAuthMiddleware_BearerPrefix(t *testing.T) {
+	cfg := defaultJWTConfig()
+
+	claims := gojwt.MapClaims{
+		"sub":  "bearer-user",
+		"name": "Bearer User",
+		"exp":  gojwt.NewNumericDate(time.Now().Add(time.Hour)),
+	}
+	tokenStr := makeHS256Token(t, claims, cfg.Secret)
+
+	var captured token.User
+	var called bool
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.Header.Set("X-Auth-Token", "Bearer "+tokenStr)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	assert.True(t, called)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "jwt_bearer-user", captured.ID)
+	assert.Equal(t, "Bearer User", captured.Name)
+}
+
 func TestJWTAuthMiddleware_InvalidToken(t *testing.T) {
 	cfg := defaultJWTConfig()
 
@@ -116,7 +149,7 @@ func TestJWTAuthMiddleware_InvalidToken(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -138,7 +171,7 @@ func TestJWTAuthMiddleware_ExpiredToken(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -171,7 +204,7 @@ func TestJWTAuthMiddleware_CustomClaimMappings(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -200,7 +233,7 @@ func TestJWTAuthMiddleware_AdminRole(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -225,7 +258,7 @@ func TestJWTAuthMiddleware_AdminRoleCaseInsensitive(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -241,7 +274,7 @@ func TestJWTAuthMiddleware_MissingHeader(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	// no X-Auth-Token header set
@@ -251,6 +284,41 @@ func TestJWTAuthMiddleware_MissingHeader(t *testing.T) {
 	assert.True(t, called, "handler should be called (pass-through) when no token header")
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Equal(t, "", captured.ID, "no user should be set when header is missing")
+}
+
+func TestJWTAuthMiddleware_MissingIDClaim(t *testing.T) {
+	cfg := defaultJWTConfig()
+
+	claims := gojwt.MapClaims{
+		"name": "No ID User",
+		"exp":  gojwt.NewNumericDate(time.Now().Add(time.Hour)),
+	}
+	tokenStr := makeHS256Token(t, claims, cfg.Secret)
+
+	var captured token.User
+	var called bool
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.Header.Set("X-Auth-Token", tokenStr)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	assert.False(t, called, "handler should not be called when ID claim is missing")
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}
+
+func TestJWTAuthMiddleware_ConfigError(t *testing.T) {
+	cfg := JWTAuthConfig{
+		Secret: "not-a-valid-pem",
+		Algo:   "RS256",
+		Header: "X-Auth-Token",
+		Map: FieldMappings{
+			ID: "sub",
+		},
+	}
+	_, err := JWTAuthMiddleware(cfg, nil)
+	assert.Error(t, err, "should return error for invalid RSA key material")
 }
 
 func TestJWTAuthMiddleware_RS256(t *testing.T) {
@@ -286,7 +354,7 @@ func TestJWTAuthMiddleware_RS256(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -313,7 +381,7 @@ func TestJWTAuthMiddleware_IssuerValidation(t *testing.T) {
 
 		var captured token.User
 		var called bool
-		handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+		handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("X-Auth-Token", tokenStr)
@@ -335,7 +403,7 @@ func TestJWTAuthMiddleware_IssuerValidation(t *testing.T) {
 
 		var captured token.User
 		var called bool
-		handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+		handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("X-Auth-Token", tokenStr)
@@ -361,7 +429,7 @@ func TestJWTAuthMiddleware_AudienceValidation(t *testing.T) {
 
 		var captured token.User
 		var called bool
-		handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+		handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("X-Auth-Token", tokenStr)
@@ -382,7 +450,7 @@ func TestJWTAuthMiddleware_AudienceValidation(t *testing.T) {
 
 		var captured token.User
 		var called bool
-		handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+		handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("X-Auth-Token", tokenStr)
@@ -427,7 +495,7 @@ func TestJWTAuthMiddleware_ES256(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -569,6 +637,28 @@ func TestForwardAuthMiddleware_InvalidJSON(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
+func TestForwardAuthMiddleware_MissingIDKey(t *testing.T) {
+	cfg := defaultForwardConfig()
+
+	payload := map[string]interface{}{
+		"name": "No ID User",
+	}
+	payloadBytes, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var captured token.User
+	var called bool
+	handler := ForwardAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.Header.Set("X-Forwarded-User", string(payloadBytes))
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	assert.False(t, called, "handler should not be called when ID key is missing")
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}
+
 func TestExtractUser(t *testing.T) {
 	m := FieldMappings{ID: "sub", Name: "name", Email: "email", Picture: "picture", Role: "role"}
 
@@ -580,7 +670,8 @@ func TestExtractUser(t *testing.T) {
 			"picture": "http://pic.com",
 			"role":    "admin",
 		}
-		user := extractUser(claims, m, "test_")
+		user, err := extractUser(claims, m, "test_")
+		require.NoError(t, err)
 		assert.Equal(t, "test_id1", user.ID)
 		assert.Equal(t, "User 1", user.Name)
 		assert.Equal(t, "u1@test.com", user.Email)
@@ -588,11 +679,12 @@ func TestExtractUser(t *testing.T) {
 		assert.True(t, user.IsAdmin())
 	})
 
-	t.Run("missing fields", func(t *testing.T) {
+	t.Run("missing optional fields", func(t *testing.T) {
 		claims := map[string]interface{}{
 			"sub": "id2",
 		}
-		user := extractUser(claims, m, "test_")
+		user, err := extractUser(claims, m, "test_")
+		require.NoError(t, err)
 		assert.Equal(t, "test_id2", user.ID)
 		assert.Equal(t, "", user.Name)
 		assert.Equal(t, "", user.Email)
@@ -600,12 +692,21 @@ func TestExtractUser(t *testing.T) {
 		assert.False(t, user.IsAdmin())
 	})
 
+	t.Run("missing ID returns error", func(t *testing.T) {
+		claims := map[string]interface{}{
+			"name": "No ID",
+		}
+		_, err := extractUser(claims, m, "test_")
+		assert.Error(t, err)
+	})
+
 	t.Run("non-admin role", func(t *testing.T) {
 		claims := map[string]interface{}{
 			"sub":  "id3",
 			"role": "viewer",
 		}
-		user := extractUser(claims, m, "test_")
+		user, err := extractUser(claims, m, "test_")
+		require.NoError(t, err)
 		assert.False(t, user.IsAdmin())
 	})
 }

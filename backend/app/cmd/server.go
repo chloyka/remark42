@@ -338,6 +338,7 @@ func (s *ServerCommand) Execute(_ []string) error {
 	log.Printf("[INFO] start server on port %s:%d", s.Address, s.Port)
 	resetEnv(
 		"SECRET",
+		"AUTH_JWT_SECRET",
 		"AUTH_APPLE_KID",
 		"AUTH_GOOGLE_CSEC",
 		"AUTH_GITHUB_CSEC",
@@ -1284,7 +1285,10 @@ func (s *ServerCommand) getAuthenticator(ds *service.DataStore, avas avatar.Stor
 			}
 			audience := c.Audience[0]
 
-			c.User.SetAdmin(ds.IsAdmin(audience, c.User.ID))
+			// for external auth users (jwt_, forward_), preserve admin flag from external claims
+			// and also check the internal admin store; for all other users, use internal store only
+			externalAdmin := (strings.HasPrefix(c.User.ID, "jwt_") || strings.HasPrefix(c.User.ID, "forward_")) && c.User.IsAdmin()
+			c.User.SetAdmin(ds.IsAdmin(audience, c.User.ID) || externalAdmin)
 			c.User.SetBoolAttr("blocked", ds.IsBlocked(audience, c.User.ID))
 			var err error
 			c.User.Email, err = ds.GetUserEmail(audience, c.User.ID)

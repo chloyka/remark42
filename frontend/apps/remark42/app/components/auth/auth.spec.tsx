@@ -293,7 +293,7 @@ describe('<Auth/>', () => {
     });
   });
 
-  describe('Transparent providers (jwt, forward_auth)', () => {
+  describe('Transparent providers (jwt, forward)', () => {
     it('should not render any buttons or form inputs when only jwt is configured', () => {
       StaticStore.config.auth_providers = ['jwt'];
 
@@ -306,8 +306,8 @@ describe('<Auth/>', () => {
       expect(container.querySelector('.oauth')).not.toBeInTheDocument();
     });
 
-    it('should not render any buttons or form inputs when only forward_auth is configured', () => {
-      StaticStore.config.auth_providers = ['forward_auth'];
+    it('should not render any buttons or form inputs when only forward is configured', () => {
+      StaticStore.config.auth_providers = ['forward'];
 
       const { container } = render(<Auth />);
 
@@ -328,8 +328,8 @@ describe('<Auth/>', () => {
       expect(screen.queryByPlaceholderText('Username')).not.toBeInTheDocument();
     });
 
-    it('should render only form providers when forward_auth is configured alongside form providers', () => {
-      StaticStore.config.auth_providers = ['email', 'forward_auth'];
+    it('should render only form providers when forward is configured alongside form providers', () => {
+      StaticStore.config.auth_providers = ['email', 'forward'];
 
       render(<Auth />);
 
@@ -338,8 +338,8 @@ describe('<Auth/>', () => {
       expect(screen.getByPlaceholderText('Email Address')).toBeInTheDocument();
     });
 
-    it('should handle both jwt and forward_auth alongside other providers', () => {
-      StaticStore.config.auth_providers = ['google', 'email', 'jwt', 'forward_auth'];
+    it('should handle both jwt and forward alongside other providers', () => {
+      StaticStore.config.auth_providers = ['google', 'email', 'jwt', 'forward'];
 
       render(<Auth />);
 

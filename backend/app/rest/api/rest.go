@@ -232,7 +232,12 @@ func (s *Rest) routes() chi.Router {
 
 	// add external JWT/forward-auth middleware before standard auth, so pre-authenticated users are recognized
 	if s.JWTAuthConf.Secret != "" {
-		router.Use(JWTAuthMiddleware(s.JWTAuthConf, s.Authenticator.TokenService()))
+		jwtMw, err := JWTAuthMiddleware(s.JWTAuthConf, s.Authenticator.TokenService())
+		if err != nil {
+			log.Printf("[ERROR] %v", err)
+		} else {
+			router.Use(jwtMw)
+		}
 	}
 	if s.ForwardAuthConf.Header != "" {
 		router.Use(ForwardAuthMiddleware(s.ForwardAuthConf, s.Authenticator.TokenService()))

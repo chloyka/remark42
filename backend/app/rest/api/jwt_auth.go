@@ -1,11 +1,7 @@
 package api
 
 import (
-	"crypto/ecdsa"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"net/http"
 	"strings"
@@ -52,12 +48,11 @@ type internalTokenCreator interface {
 // and sets user info in the request context. If tokenCreator is provided, it also creates an internal
 // remark42 JWT token and sets it as the X-JWT header so the downstream auth middleware recognizes the user.
 // If no token header is present, the request passes through.
-func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) func(http.Handler) http.Handler {
+// Returns an error if the configuration is invalid (e.g., bad key material).
+func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) (func(http.Handler) http.Handler, error) {
 	keyFunc, err := makeKeyFunc(cfg.Algo, cfg.Secret)
 	if err != nil {
-		log.Printf("[WARN] JWT auth middleware configuration error: %v", err)
-		// return pass-through middleware if config is broken
-		return func(next http.Handler) http.Handler { return next }
+		return nil, fmt.Errorf("JWT auth middleware configuration error: %w", err)
 	}
 
 	parserOpts := []gojwt.ParserOption{
@@ -74,6 +69,9 @@ func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) fun
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := r.Header.Get(cfg.Header)
+			// strip Bearer prefix if present (standard Authorization header format)
+			tokenStr = strings.TrimPrefix(tokenStr, "Bearer ")
+			tokenStr = strings.TrimSpace(tokenStr)
 			if tokenStr == "" {
 				next.ServeHTTP(w, r)
 				return
@@ -93,12 +91,17 @@ func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) fun
 				return
 			}
 
-			user := extractUser(claims, cfg.Map, "jwt_")
+			user, err := extractUser(claims, cfg.Map, "jwt_")
+			if err != nil {
+				log.Printf("[WARN] JWT auth: %v", err)
+				http.Error(w, "missing user ID claim", http.StatusUnauthorized)
+				return
+			}
 			r = token.SetUserInfo(r, user)
 			r = setInternalToken(r, user, tokenCreator)
 			next.ServeHTTP(w, r)
 		})
-	}
+	}, nil
 }
 
 // ForwardAuthMiddleware creates middleware that reads decoded user claims from the configured header
@@ -120,7 +123,12 @@ func ForwardAuthMiddleware(cfg ForwardAuthConfig, tokenCreator internalTokenCrea
 				return
 			}
 
-			user := extractUser(payload, cfg.Map, "forward_")
+			user, err := extractUser(payload, cfg.Map, "forward_")
+			if err != nil {
+				log.Printf("[WARN] forward auth: %v", err)
+				http.Error(w, "missing user ID in forward-auth payload", http.StatusUnauthorized)
+				return
+			}
 			r = token.SetUserInfo(r, user)
 			r = setInternalToken(r, user, tokenCreator)
 			next.ServeHTTP(w, r)
@@ -156,10 +164,16 @@ func setInternalToken(r *http.Request, user token.User, tc internalTokenCreator)
 	return r
 }
 
-// extractUser builds a token.User from a claims/payload map using the given field mappings
-func extractUser(claims map[string]interface{}, m FieldMappings, prefix string) token.User {
+// extractUser builds a token.User from a claims/payload map using the given field mappings.
+// Returns an error if the user ID claim is missing or empty.
+func extractUser(claims map[string]interface{}, m FieldMappings, prefix string) (token.User, error) {
+	rawID := claimStr(claims, m.ID)
+	if rawID == "" {
+		return token.User{}, fmt.Errorf("user ID claim %q is missing or empty", m.ID)
+	}
+
 	user := token.User{
-		ID:      prefix + claimStr(claims, m.ID),
+		ID:      prefix + rawID,
 		Name:    claimStr(claims, m.Name),
 		Email:   claimStr(claims, m.Email),
 		Picture: claimStr(claims, m.Picture),
@@ -170,7 +184,7 @@ func extractUser(claims map[string]interface{}, m FieldMappings, prefix string) 
 		user.SetAdmin(true)
 	}
 
-	return user
+	return user, nil
 }
 
 // claimStr extracts a string value from a claims map; returns empty string if missing or not a string
@@ -199,7 +213,7 @@ func makeKeyFunc(algo, secret string) (gojwt.Keyfunc, error) {
 		}, nil
 
 	case strings.HasPrefix(algo, "RS"): // RSA
-		pubKey, err := parseRSAPublicKey(secret)
+		pubKey, err := gojwt.ParseRSAPublicKeyFromPEM([]byte(secret))
 		if err != nil {
 			return nil, fmt.Errorf("can't parse RSA public key: %w", err)
 		}
@@ -211,7 +225,7 @@ func makeKeyFunc(algo, secret string) (gojwt.Keyfunc, error) {
 		}, nil
 
 	case strings.HasPrefix(algo, "ES"): // ECDSA
-		pubKey, err := parseECDSAPublicKey(secret)
+		pubKey, err := gojwt.ParseECPublicKeyFromPEM([]byte(secret))
 		if err != nil {
 			return nil, fmt.Errorf("can't parse ECDSA public key: %w", err)
 		}
@@ -225,38 +239,4 @@ func makeKeyFunc(algo, secret string) (gojwt.Keyfunc, error) {
 	default:
 		return nil, fmt.Errorf("unsupported JWT algorithm: %s", algo)
 	}
-}
-
-// parseRSAPublicKey parses a PEM-encoded RSA public key
-func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
-	block, _ := pem.Decode([]byte(pemStr))
-	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block")
-	}
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	rsaKey, ok := pub.(*rsa.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("not an RSA public key")
-	}
-	return rsaKey, nil
-}
-
-// parseECDSAPublicKey parses a PEM-encoded ECDSA public key
-func parseECDSAPublicKey(pemStr string) (*ecdsa.PublicKey, error) {
-	block, _ := pem.Decode([]byte(pemStr))
-	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block")
-	}
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	ecKey, ok := pub.(*ecdsa.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("not an ECDSA public key")
-	}
-	return ecKey, nil
 }

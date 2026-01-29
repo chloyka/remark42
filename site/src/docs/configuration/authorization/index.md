@@ -147,6 +147,14 @@ These settings control which JWT claims map to Remark42 user fields:
 
 If the value of the role claim equals `admin` (case-insensitive), the user is granted admin privileges in Remark42. Any other value or a missing role claim results in a regular user.
 
+#### User ID Format
+
+User IDs from JWT authentication are prefixed with `jwt_`. For example, if the `sub` claim value is `user123`, the resulting Remark42 user ID will be `jwt_user123`. When configuring `ADMIN_SHARED_ID`, use the prefixed form.
+
+#### Notes
+
+- The header value may optionally include a `Bearer ` prefix (e.g., `Authorization: Bearer <token>`), which is automatically stripped before parsing.
+
 #### Example: Traefik with Authelia
 
 In this setup, Traefik forwards authenticated requests to Remark42 with an `Authorization` header containing a JWT token issued by Authelia:
@@ -172,6 +180,14 @@ When enabled, Remark42 checks incoming requests for the configured header. If fo
 
 Like JWT auth, forward auth is a transparent provider with **no login button** in the UI.
 
+> **Security Warning:** Forward auth mode trusts the contents of the configured header without any cryptographic verification. You **must** ensure that:
+>
+> 1. Remark42 is only accessible through the reverse proxy (not directly by clients)
+> 2. The reverse proxy strips/overrides the configured header on incoming requests before forwarding
+> 3. No untrusted party can set the header value
+>
+> If clients can reach Remark42 directly, they can forge the header and impersonate any user, including admins. If you cannot guarantee proxy-only access, use JWT mode instead.
+
 #### Configuration
 
 - `AUTH_FORWARD_HEADER` (**required** to enable forward-auth mode) - HTTP header containing the decoded user payload as a JSON string
@@ -189,6 +205,10 @@ These settings control which JSON keys in the header payload map to Remark42 use
 #### Role Mapping
 
 Same as JWT mode: if the role field value equals `admin` (case-insensitive), the user gets admin privileges.
+
+#### User ID Format
+
+User IDs from forward auth are prefixed with `forward_`. For example, if the `sub` field value is `user123`, the resulting Remark42 user ID will be `forward_user123`. When configuring `ADMIN_SHARED_ID`, use the prefixed form.
 
 #### Example: Traefik with Forward Auth
 

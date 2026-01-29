@@ -104,7 +104,7 @@ export type OAuthProvider =
   | 'dev';
 export type FormProvider = 'email' | 'anonymous';
 /** Transparent providers handle auth externally (e.g. reverse proxy) and require no UI */
-export type TransparentProvider = 'jwt' | 'forward_auth';
+export type TransparentProvider = 'jwt' | 'forward';
 export type Provider = OAuthProvider | FormProvider | TransparentProvider;
 
 export interface Config {
