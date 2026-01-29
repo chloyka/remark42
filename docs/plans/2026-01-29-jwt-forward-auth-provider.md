@@ -182,13 +182,13 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
 - All modified files
 
 ### Steps
-- [ ] Run `cd backend && golangci-lint run`
-- [ ] Run `cd backend/_example/memory_store && golangci-lint run --config ../../.golangci.yml`
-- [ ] Run `cd backend/app && go test -timeout=60s -count 1 ./...`
-- [ ] Run `cd backend/_example/memory_store && go test -race ./... && go build -race ./...`
-- [ ] Run `cd frontend && pnpm lint`
-- [ ] Run `cd frontend && pnpm test`
-- [ ] Fix any issues found
+- [x] Run `cd backend && golangci-lint run`
+- [x] Run `cd backend/_example/memory_store && golangci-lint run --config ../../.golangci.yml`
+- [x] Run `cd backend/app && go test -timeout=60s -count 1 ./...`
+- [x] Run `cd backend/_example/memory_store && go test -race ./... && go build -race ./...`
+- [x] Run `cd frontend && pnpm lint`
+- [x] Run `cd frontend && pnpm test`
+- [x] Fix any issues found
 
 ---
 
