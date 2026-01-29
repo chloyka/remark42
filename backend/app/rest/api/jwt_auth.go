@@ -69,8 +69,10 @@ func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) (fu
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := r.Header.Get(cfg.Header)
-			// strip Bearer prefix if present (standard Authorization header format)
-			tokenStr = strings.TrimPrefix(tokenStr, "Bearer ")
+			// strip Bearer prefix if present (case-insensitive per RFC 6750)
+			if len(tokenStr) > 7 && strings.EqualFold(tokenStr[:7], "bearer ") {
+				tokenStr = tokenStr[7:]
+			}
 			tokenStr = strings.TrimSpace(tokenStr)
 			if tokenStr == "" {
 				next.ServeHTTP(w, r)
@@ -97,8 +99,12 @@ func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) (fu
 				http.Error(w, "missing user ID claim", http.StatusUnauthorized)
 				return
 			}
+			r, err = setInternalToken(r, user, tokenCreator)
+			if err != nil {
+				http.Error(w, "failed to create auth token", http.StatusInternalServerError)
+				return
+			}
 			r = token.SetUserInfo(r, user)
-			r = setInternalToken(r, user, tokenCreator)
 			next.ServeHTTP(w, r)
 		})
 	}, nil
@@ -129,8 +135,12 @@ func ForwardAuthMiddleware(cfg ForwardAuthConfig, tokenCreator internalTokenCrea
 				http.Error(w, "missing user ID in forward-auth payload", http.StatusUnauthorized)
 				return
 			}
+			r, err = setInternalToken(r, user, tokenCreator)
+			if err != nil {
+				http.Error(w, "failed to create auth token", http.StatusInternalServerError)
+				return
+			}
 			r = token.SetUserInfo(r, user)
-			r = setInternalToken(r, user, tokenCreator)
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -138,9 +148,9 @@ func ForwardAuthMiddleware(cfg ForwardAuthConfig, tokenCreator internalTokenCrea
 
 // setInternalToken creates an internal remark42 JWT token for the given user and sets it
 // on the request's X-JWT header so the downstream go-pkgz/auth middleware recognizes the user.
-func setInternalToken(r *http.Request, user token.User, tc internalTokenCreator) *http.Request {
+func setInternalToken(r *http.Request, user token.User, tc internalTokenCreator) (*http.Request, error) {
 	if tc == nil {
-		return r
+		return r, nil
 	}
 
 	// extract site ID from the request query parameter to use as the audience for the internal token
@@ -158,10 +168,10 @@ func setInternalToken(r *http.Request, user token.User, tc internalTokenCreator)
 	tkn, err := tc.Token(claims)
 	if err != nil {
 		log.Printf("[WARN] external auth: can't create internal token for %s, %v", user.ID, err)
-		return r
+		return r, fmt.Errorf("can't create internal token: %w", err)
 	}
 	r.Header.Set("X-JWT", tkn)
-	return r
+	return r, nil
 }
 
 // extractUser builds a token.User from a claims/payload map using the given field mappings.

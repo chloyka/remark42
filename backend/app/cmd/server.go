@@ -671,6 +671,20 @@ func (s *ServerCommand) newServerApp(ctx context.Context) (*serverApp, error) {
 
 	srv.ScoreThresholds.Low, srv.ScoreThresholds.Critical = s.LowScore, s.CriticalScore
 
+	// validate JWT/forward-auth configuration early to prevent silent startup failures
+	if s.Auth.JWT.Secret != "" {
+		if s.Auth.JWT.Header == "X-JWT" {
+			_ = dataService.Close()
+			_ = authRefreshCache.Close()
+			return nil, fmt.Errorf("AUTH_JWT_HEADER cannot be 'X-JWT' as it conflicts with remark42's internal auth header")
+		}
+		if _, err := api.JWTAuthMiddleware(srv.JWTAuthConf, nil); err != nil {
+			_ = dataService.Close()
+			_ = authRefreshCache.Close()
+			return nil, fmt.Errorf("invalid JWT auth configuration: %w", err)
+		}
+	}
+
 	var devAuth *provider.DevAuthServer
 	if s.Auth.Dev {
 		da, errDevAuth := authenticator.DevAuth()

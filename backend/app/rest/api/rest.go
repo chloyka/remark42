@@ -219,10 +219,17 @@ func (s *Rest) routes() chi.Router {
 	if s.ProxyCORS {
 		log.Printf("[WARN] internal CORS disabled")
 	} else {
+		allowedHeaders := []string{"Accept", "Authorization", "Content-Type", "X-XSRF-Token", "X-JWT"}
+		if s.JWTAuthConf.Secret != "" && s.JWTAuthConf.Header != "" {
+			allowedHeaders = append(allowedHeaders, s.JWTAuthConf.Header)
+		}
+		if s.ForwardAuthConf.Header != "" {
+			allowedHeaders = append(allowedHeaders, s.ForwardAuthConf.Header)
+		}
 		corsMiddleware := cors.New(cors.Options{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-XSRF-Token", "X-JWT"},
+			AllowedHeaders:   allowedHeaders,
 			ExposedHeaders:   []string{"Authorization"},
 			AllowCredentials: true,
 			MaxAge:           300,
@@ -234,10 +241,9 @@ func (s *Rest) routes() chi.Router {
 	if s.JWTAuthConf.Secret != "" {
 		jwtMw, err := JWTAuthMiddleware(s.JWTAuthConf, s.Authenticator.TokenService())
 		if err != nil {
-			log.Printf("[ERROR] %v", err)
-		} else {
-			router.Use(jwtMw)
+			log.Fatalf("[ERROR] JWT auth middleware configuration failed: %v", err)
 		}
+		router.Use(jwtMw)
 	}
 	if s.ForwardAuthConf.Header != "" {
 		router.Use(ForwardAuthMiddleware(s.ForwardAuthConf, s.Authenticator.TokenService()))
