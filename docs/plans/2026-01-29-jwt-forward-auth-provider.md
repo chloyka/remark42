@@ -147,10 +147,10 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
 - Modify: `frontend/apps/remark42/app/components/auth/auth.utils.ts` or relevant provider constants file
 
 ### Steps
-- [ ] Add `"jwt"` and `"forward_auth"` to the known provider list so TypeScript doesn't flag them as unknown (even though they won't render UI buttons)
-- [ ] Ensure that if these providers appear in the `auth_providers` config response, they are silently ignored in the UI (no button rendered) - verify the existing logic already handles unknown providers gracefully, or add a filter
-- [ ] Write/update frontend test if applicable to verify unknown/transparent providers don't break the auth panel
-- [ ] Run `cd frontend && pnpm test` - must pass
+- [x] Add `"jwt"` and `"forward_auth"` to the known provider list so TypeScript doesn't flag them as unknown (even though they won't render UI buttons)
+- [x] Ensure that if these providers appear in the `auth_providers` config response, they are silently ignored in the UI (no button rendered) - verify the existing logic already handles unknown providers gracefully, or add a filter
+- [x] Write/update frontend test if applicable to verify unknown/transparent providers don't break the auth panel
+- [x] Run `cd frontend && pnpm test` - must pass
 
 ---
 

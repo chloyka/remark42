@@ -103,7 +103,9 @@ export type OAuthProvider =
   | 'telegram'
   | 'dev';
 export type FormProvider = 'email' | 'anonymous';
-export type Provider = OAuthProvider | FormProvider;
+/** Transparent providers handle auth externally (e.g. reverse proxy) and require no UI */
+export type TransparentProvider = 'jwt' | 'forward_auth';
+export type Provider = OAuthProvider | FormProvider | TransparentProvider;
 
 export interface Config {
   version: string;

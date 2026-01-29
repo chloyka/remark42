@@ -293,6 +293,63 @@ describe('<Auth/>', () => {
     });
   });
 
+  describe('Transparent providers (jwt, forward_auth)', () => {
+    it('should not render any buttons or form inputs when only jwt is configured', () => {
+      StaticStore.config.auth_providers = ['jwt'];
+
+      const { container } = render(<Auth />);
+
+      fireEvent.click(screen.getByText('Sign In'));
+      expect(container.querySelector('.auth-dropdown')).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('Username')).not.toBeInTheDocument();
+      expect(screen.queryByText('Submit')).not.toBeInTheDocument();
+      expect(container.querySelector('.oauth')).not.toBeInTheDocument();
+    });
+
+    it('should not render any buttons or form inputs when only forward_auth is configured', () => {
+      StaticStore.config.auth_providers = ['forward_auth'];
+
+      const { container } = render(<Auth />);
+
+      fireEvent.click(screen.getByText('Sign In'));
+      expect(container.querySelector('.auth-dropdown')).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('Username')).not.toBeInTheDocument();
+      expect(screen.queryByText('Submit')).not.toBeInTheDocument();
+      expect(container.querySelector('.oauth')).not.toBeInTheDocument();
+    });
+
+    it('should render only oauth buttons when jwt is configured alongside oauth providers', () => {
+      StaticStore.config.auth_providers = ['google', 'jwt'];
+
+      render(<Auth />);
+
+      fireEvent.click(screen.getByText('Sign In'));
+      expect(screen.getByTitle('Sign In with Google')).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('Username')).not.toBeInTheDocument();
+    });
+
+    it('should render only form providers when forward_auth is configured alongside form providers', () => {
+      StaticStore.config.auth_providers = ['email', 'forward_auth'];
+
+      render(<Auth />);
+
+      fireEvent.click(screen.getByText('Sign In'));
+      expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Email Address')).toBeInTheDocument();
+    });
+
+    it('should handle both jwt and forward_auth alongside other providers', () => {
+      StaticStore.config.auth_providers = ['google', 'email', 'jwt', 'forward_auth'];
+
+      render(<Auth />);
+
+      fireEvent.click(screen.getByText('Sign In'));
+      expect(screen.getByTitle('Sign In with Google')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Email Address')).toBeInTheDocument();
+    });
+  });
+
   describe('Telegram auth', () => {
     it('should go through the auth flow', async () => {
       StaticStore.config.auth_providers = ['telegram'];
