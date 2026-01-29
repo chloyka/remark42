@@ -41,9 +41,18 @@ type ForwardAuthConfig struct {
 	Map    FieldMappings
 }
 
+// internalTokenCreator creates internal remark42 JWT tokens from user info.
+// This is used by the JWT/forward-auth middleware to bridge external auth with
+// the go-pkgz/auth middleware which expects its own JWT tokens.
+type internalTokenCreator interface {
+	Token(claims token.Claims) (string, error)
+}
+
 // JWTAuthMiddleware creates middleware that validates an external JWT token from the configured header
-// and sets user info in the request context. If no token header is present, the request passes through.
-func JWTAuthMiddleware(cfg JWTAuthConfig) func(http.Handler) http.Handler {
+// and sets user info in the request context. If tokenCreator is provided, it also creates an internal
+// remark42 JWT token and sets it as the X-JWT header so the downstream auth middleware recognizes the user.
+// If no token header is present, the request passes through.
+func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) func(http.Handler) http.Handler {
 	keyFunc, err := makeKeyFunc(cfg.Algo, cfg.Secret)
 	if err != nil {
 		log.Printf("[WARN] JWT auth middleware configuration error: %v", err)
@@ -86,14 +95,16 @@ func JWTAuthMiddleware(cfg JWTAuthConfig) func(http.Handler) http.Handler {
 
 			user := extractUser(claims, cfg.Map, "jwt_")
 			r = token.SetUserInfo(r, user)
+			r = setInternalToken(r, user, tokenCreator)
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
 // ForwardAuthMiddleware creates middleware that reads decoded user claims from the configured header
-// (as a JSON string) and sets user info in the request context. If no header is present, passes through.
-func ForwardAuthMiddleware(cfg ForwardAuthConfig) func(http.Handler) http.Handler {
+// (as a JSON string) and sets user info in the request context. If tokenCreator is provided, it also
+// creates an internal remark42 JWT token. If no header is present, passes through.
+func ForwardAuthMiddleware(cfg ForwardAuthConfig, tokenCreator internalTokenCreator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			headerVal := r.Header.Get(cfg.Header)
@@ -111,9 +122,38 @@ func ForwardAuthMiddleware(cfg ForwardAuthConfig) func(http.Handler) http.Handle
 
 			user := extractUser(payload, cfg.Map, "forward_")
 			r = token.SetUserInfo(r, user)
+			r = setInternalToken(r, user, tokenCreator)
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// setInternalToken creates an internal remark42 JWT token for the given user and sets it
+// on the request's X-JWT header so the downstream go-pkgz/auth middleware recognizes the user.
+func setInternalToken(r *http.Request, user token.User, tc internalTokenCreator) *http.Request {
+	if tc == nil {
+		return r
+	}
+
+	// extract site ID from the request query parameter to use as the audience for the internal token
+	siteID := r.URL.Query().Get("site")
+	if siteID == "" {
+		siteID = "remark42" // default site ID
+	}
+
+	claims := token.Claims{
+		User: &user,
+	}
+	claims.Audience = []string{siteID}
+	claims.Issuer = "remark42"
+
+	tkn, err := tc.Token(claims)
+	if err != nil {
+		log.Printf("[WARN] external auth: can't create internal token for %s, %v", user.ID, err)
+		return r
+	}
+	r.Header.Set("X-JWT", tkn)
+	return r
 }
 
 // extractUser builds a token.User from a claims/payload map using the given field mappings

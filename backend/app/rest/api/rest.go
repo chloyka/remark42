@@ -232,10 +232,10 @@ func (s *Rest) routes() chi.Router {
 
 	// add external JWT/forward-auth middleware before standard auth, so pre-authenticated users are recognized
 	if s.JWTAuthConf.Secret != "" {
-		router.Use(JWTAuthMiddleware(s.JWTAuthConf))
+		router.Use(JWTAuthMiddleware(s.JWTAuthConf, s.Authenticator.TokenService()))
 	}
 	if s.ForwardAuthConf.Header != "" {
-		router.Use(ForwardAuthMiddleware(s.ForwardAuthConf))
+		router.Use(ForwardAuthMiddleware(s.ForwardAuthConf, s.Authenticator.TokenService()))
 	}
 
 	ipFn := func(ip string) string { return store.HashValue(ip, s.SharedSecret)[:12] } // logger uses it for anonymization

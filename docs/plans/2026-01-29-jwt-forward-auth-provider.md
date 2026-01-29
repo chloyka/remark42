@@ -132,12 +132,12 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
 - Create: `backend/app/rest/api/jwt_auth_integration_test.go`
 
 ### Steps
-- [ ] Write an integration test that starts a full Rest server with JWT auth configured, sends a request with a valid JWT token in the configured header, and verifies the user is authenticated (can access protected endpoints like `/api/v1/user`)
-- [ ] Write an integration test for forward-auth mode: start server with forward-auth configured, send request with JSON payload header, verify user is authenticated
-- [ ] Test that admin role mapping works end-to-end: user with admin role can access admin endpoints
-- [ ] Test that JWT and forward-auth can coexist with standard OAuth providers (both work)
-- [ ] Test that requests without JWT/forward-auth headers fall through to standard auth
-- [ ] Run `cd backend/app && go test -count 1 ./rest/api/` - must pass
+- [x] Write an integration test that starts a full Rest server with JWT auth configured, sends a request with a valid JWT token in the configured header, and verifies the user is authenticated (can access protected endpoints like `/api/v1/user`)
+- [x] Write an integration test for forward-auth mode: start server with forward-auth configured, send request with JSON payload header, verify user is authenticated
+- [x] Test that admin role mapping works end-to-end: user with admin role can access admin endpoints
+- [x] Test that JWT and forward-auth can coexist with standard OAuth providers (both work)
+- [x] Test that requests without JWT/forward-auth headers fall through to standard auth
+- [x] Run `cd backend/app && go test -count 1 ./rest/api/` - must pass
 
 ---
 

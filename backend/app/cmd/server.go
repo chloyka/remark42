@@ -962,10 +962,16 @@ func (s *ServerCommand) addAuthProviders(authenticator *auth.Service) error {
 
 	if s.Auth.JWT.Secret != "" {
 		log.Printf("[INFO] JWT auth enabled, header: %s, algo: %s", s.Auth.JWT.Header, s.Auth.JWT.Algo)
+		authenticator.AddDirectProvider("jwt", provider.CredCheckerFunc(func(_, _ string) (bool, error) {
+			return false, nil // JWT auth is handled by middleware, not by direct login
+		}))
 		providersCount++
 	}
 	if s.Auth.Forward.Header != "" {
 		log.Printf("[INFO] forward auth enabled, header: %s", s.Auth.Forward.Header)
+		authenticator.AddDirectProvider("forward", provider.CredCheckerFunc(func(_, _ string) (bool, error) {
+			return false, nil // forward auth is handled by middleware, not by direct login
+		}))
 		providersCount++
 	}
 

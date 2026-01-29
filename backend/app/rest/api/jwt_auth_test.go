@@ -88,7 +88,7 @@ func TestJWTAuthMiddleware_ValidHS256Token(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -116,7 +116,7 @@ func TestJWTAuthMiddleware_InvalidToken(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -138,7 +138,7 @@ func TestJWTAuthMiddleware_ExpiredToken(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -171,7 +171,7 @@ func TestJWTAuthMiddleware_CustomClaimMappings(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -200,7 +200,7 @@ func TestJWTAuthMiddleware_AdminRole(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -225,7 +225,7 @@ func TestJWTAuthMiddleware_AdminRoleCaseInsensitive(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -241,7 +241,7 @@ func TestJWTAuthMiddleware_MissingHeader(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	// no X-Auth-Token header set
@@ -286,7 +286,7 @@ func TestJWTAuthMiddleware_RS256(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -313,7 +313,7 @@ func TestJWTAuthMiddleware_IssuerValidation(t *testing.T) {
 
 		var captured token.User
 		var called bool
-		handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+		handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("X-Auth-Token", tokenStr)
@@ -335,7 +335,7 @@ func TestJWTAuthMiddleware_IssuerValidation(t *testing.T) {
 
 		var captured token.User
 		var called bool
-		handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+		handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("X-Auth-Token", tokenStr)
@@ -361,7 +361,7 @@ func TestJWTAuthMiddleware_AudienceValidation(t *testing.T) {
 
 		var captured token.User
 		var called bool
-		handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+		handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("X-Auth-Token", tokenStr)
@@ -382,7 +382,7 @@ func TestJWTAuthMiddleware_AudienceValidation(t *testing.T) {
 
 		var captured token.User
 		var called bool
-		handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+		handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("X-Auth-Token", tokenStr)
@@ -427,7 +427,7 @@ func TestJWTAuthMiddleware_ES256(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := JWTAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := JWTAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Auth-Token", tokenStr)
@@ -456,7 +456,7 @@ func TestForwardAuthMiddleware_ValidJSON(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := ForwardAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := ForwardAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Forwarded-User", string(payloadBytes))
@@ -485,7 +485,7 @@ func TestForwardAuthMiddleware_AdminRole(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := ForwardAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := ForwardAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Forwarded-User", string(payloadBytes))
@@ -520,7 +520,7 @@ func TestForwardAuthMiddleware_CustomMappings(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := ForwardAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := ForwardAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-User-Info", string(payloadBytes))
@@ -541,7 +541,7 @@ func TestForwardAuthMiddleware_MissingHeader(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := ForwardAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := ForwardAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	// no header set
@@ -558,7 +558,7 @@ func TestForwardAuthMiddleware_InvalidJSON(t *testing.T) {
 
 	var captured token.User
 	var called bool
-	handler := ForwardAuthMiddleware(cfg)(captureUserHandler(t, &captured, &called))
+	handler := ForwardAuthMiddleware(cfg, nil)(captureUserHandler(t, &captured, &called))
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("X-Forwarded-User", "not-valid-json{{{")
