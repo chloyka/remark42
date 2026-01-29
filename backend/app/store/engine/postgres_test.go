@@ -843,10 +843,10 @@ func TestPostgresDB_CountUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 
-	// count for non-existent user
-	count, err = pg.Count(FindRequest{Locator: store.Locator{SiteID: "radio-t"}, UserID: "no-user"})
-	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	// count for non-existent user — should return error matching BoltDB behavior
+	_, err = pg.Count(FindRequest{Locator: store.Locator{SiteID: "radio-t"}, UserID: "no-user"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no comments for user")
 
 	// invalid request
 	_, err = pg.Count(FindRequest{Locator: store.Locator{SiteID: "radio-t"}})

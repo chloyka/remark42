@@ -23,7 +23,9 @@ type PostgresDB struct {
 func NewPostgresDB(dsn string, sites []string) (*PostgresDB, error) {
 	log.Printf("[INFO] postgres store, sites %v", sites)
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		TranslateError: true, // translate DB-specific errors (e.g., unique constraint) to GORM errors
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open postgres connection: %w", err)
 	}
@@ -82,18 +84,12 @@ func (p *PostgresDB) Create(comment store.Comment) (string, error) {
 		return "", fmt.Errorf("post %s is read-only", comment.Locator.URL)
 	}
 
-	// check for duplicate
-	var count int64
-	if err := p.db.Model(&GormComment{}).Where("id = ? AND site_id = ? AND url = ?",
-		comment.ID, comment.Locator.SiteID, comment.Locator.URL).Count(&count).Error; err != nil {
-		return "", fmt.Errorf("failed to check for duplicate: %w", err)
-	}
-	if count > 0 {
-		return "", fmt.Errorf("key %s already in store", comment.ID)
-	}
-
 	gc := FromComment(comment)
 	if err := p.db.Create(&gc).Error; err != nil {
+		// handle unique constraint violation (race-safe: the DB enforces the unique index on id+site_id+url)
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return "", fmt.Errorf("key %s already in store", comment.ID)
+		}
 		return "", fmt.Errorf("failed to create comment %s: %w", comment.ID, err)
 	}
 
@@ -214,7 +210,10 @@ func (p *PostgresDB) deleteComment(locator store.Locator, commentID string, mode
 	existing.SetDeleted(mode)
 
 	gc := FromComment(existing)
-	if err := p.db.Save(&gc).Error; err != nil {
+	// use scoped Where to match by (id, site_id, url) instead of relying on PK-only Save,
+	// which ensures correctness even if comment IDs are not globally unique (e.g., imports)
+	if err := p.db.Where("id = ? AND site_id = ? AND url = ?",
+		gc.ID, gc.SiteID, gc.URL).Save(&gc).Error; err != nil {
 		return fmt.Errorf("can't save deleted comment for key %s: %w", commentID, err)
 	}
 

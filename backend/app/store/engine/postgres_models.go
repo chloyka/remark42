@@ -9,7 +9,7 @@ import (
 
 // GormComment maps to the "comments" table
 type GormComment struct {
-	ID            string    `gorm:"column:id;primaryKey"`
+	ID            string    `gorm:"column:id;primaryKey;uniqueIndex:idx_comments_id_site_url,priority:1"`
 	ParentID      string    `gorm:"column:parent_id"`
 	Text          string    `gorm:"column:text;type:text"`
 	Orig          string    `gorm:"column:orig;type:text"`
@@ -18,8 +18,8 @@ type GormComment struct {
 	UserPicture   string    `gorm:"column:user_picture"`
 	UserIP        string    `gorm:"column:user_ip"`
 	UserAdmin     bool      `gorm:"column:user_admin"`
-	SiteID        string    `gorm:"column:site_id;index:idx_comments_site_url,priority:1;index:idx_comments_site_user,priority:1;index:idx_comments_site_ts,priority:1"`
-	URL           string    `gorm:"column:url;index:idx_comments_site_url,priority:2"`
+	SiteID        string    `gorm:"column:site_id;uniqueIndex:idx_comments_id_site_url,priority:2;index:idx_comments_site_url,priority:1;index:idx_comments_site_user,priority:1;index:idx_comments_site_ts,priority:1"`
+	URL           string    `gorm:"column:url;uniqueIndex:idx_comments_id_site_url,priority:3;index:idx_comments_site_url,priority:2"`
 	Score         int       `gorm:"column:score"`
 	Votes         string    `gorm:"column:votes;type:text"`
 	VotedIPs      string    `gorm:"column:voted_ips;type:text"`
