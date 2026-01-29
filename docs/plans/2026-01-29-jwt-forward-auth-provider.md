@@ -194,14 +194,14 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
 
 ## Validation Checklist
 
-- [ ] Manual test: configure JWT auth with a test secret, generate a JWT with `sub`, `name`, `role=admin` claims, send request with the token in the configured header, verify user is authenticated as admin
-- [ ] Manual test: configure forward-auth, send request with JSON user payload in header, verify authentication
-- [ ] Run full backend test suite: `cd backend/app && go test -timeout=60s -count 1 ./...`
-- [ ] Run backend linter: `cd backend && golangci-lint run`
-- [ ] Run example tests: `cd backend/_example/memory_store && go test -race ./... && go build -race ./...`
-- [ ] Run example linter: `cd backend/_example/memory_store && golangci-lint run --config ../../.golangci.yml`
-- [ ] Run frontend tests: `cd frontend && pnpm test`
-- [ ] Run frontend linter: `cd frontend && pnpm lint`
+- [x] Manual test: configure JWT auth with a test secret, generate a JWT with `sub`, `name`, `role=admin` claims, send request with the token in the configured header, verify user is authenticated as admin
+- [x] Manual test: configure forward-auth, send request with JSON user payload in header, verify authentication
+- [x] Run full backend test suite: `cd backend/app && go test -timeout=60s -count 1 ./...`
+- [x] Run backend linter: `cd backend && golangci-lint run`
+- [x] Run example tests: `cd backend/_example/memory_store && go test -race ./... && go build -race ./...`
+- [x] Run example linter: `cd backend/_example/memory_store && golangci-lint run --config ../../.golangci.yml`
+- [x] Run frontend tests: `cd frontend && pnpm test`
+- [x] Run frontend linter: `cd frontend && pnpm lint`
 
 ## Post-Completion
 
