@@ -725,3 +725,26 @@ func TestClaimStr(t *testing.T) {
 	assert.Equal(t, "true", claimStr(claims, "bool_val"))
 	assert.Equal(t, "", claimStr(claims, "missing"))
 }
+
+func TestJWTAuthMiddleware_TokenWithoutExpiry(t *testing.T) {
+	cfg := defaultJWTConfig()
+
+	// create a token without an exp claim
+	claims := gojwt.MapClaims{
+		"sub":  "no-expiry-user",
+		"name": "No Expiry",
+	}
+	tokenStr := makeHS256Token(t, claims, cfg.Secret)
+
+	var captured token.User
+	var called bool
+	handler := requireJWTMiddleware(t, cfg)(captureUserHandler(t, &captured, &called))
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.Header.Set("X-Auth-Token", tokenStr)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	assert.False(t, called, "handler should not be called for token without exp claim")
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}

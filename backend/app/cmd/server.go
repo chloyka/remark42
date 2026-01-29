@@ -673,7 +673,7 @@ func (s *ServerCommand) newServerApp(ctx context.Context) (*serverApp, error) {
 
 	// validate JWT/forward-auth configuration early to prevent silent startup failures
 	if s.Auth.JWT.Secret != "" {
-		if s.Auth.JWT.Header == "X-JWT" {
+		if strings.EqualFold(s.Auth.JWT.Header, "X-JWT") {
 			_ = dataService.Close()
 			_ = authRefreshCache.Close()
 			return nil, fmt.Errorf("AUTH_JWT_HEADER cannot be 'X-JWT' as it conflicts with remark42's internal auth header")
@@ -685,12 +685,17 @@ func (s *ServerCommand) newServerApp(ctx context.Context) (*serverApp, error) {
 		}
 	}
 	if s.Auth.Forward.Header != "" {
-		if s.Auth.Forward.Header == "X-JWT" {
+		if strings.EqualFold(s.Auth.Forward.Header, "X-JWT") {
 			_ = dataService.Close()
 			_ = authRefreshCache.Close()
 			return nil, fmt.Errorf("AUTH_FORWARD_HEADER cannot be 'X-JWT' as it conflicts with remark42's internal auth header")
 		}
 		log.Printf("[WARN] forward auth enabled - ensure your reverse proxy strips the %q header from client requests", s.Auth.Forward.Header)
+	}
+	if s.Auth.JWT.Secret != "" && s.Auth.Forward.Header != "" && strings.EqualFold(s.Auth.JWT.Header, s.Auth.Forward.Header) {
+		_ = dataService.Close()
+		_ = authRefreshCache.Close()
+		return nil, fmt.Errorf("AUTH_JWT_HEADER and AUTH_FORWARD_HEADER cannot be the same (%q)", s.Auth.JWT.Header)
 	}
 
 	var devAuth *provider.DevAuthServer

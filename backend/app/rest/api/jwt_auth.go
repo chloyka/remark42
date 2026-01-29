@@ -59,6 +59,7 @@ func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) (fu
 
 	parserOpts := []gojwt.ParserOption{
 		gojwt.WithValidMethods([]string{cfg.Algo}),
+		gojwt.WithExpirationRequired(),
 	}
 	if cfg.Issuer != "" {
 		parserOpts = append(parserOpts, gojwt.WithIssuer(cfg.Issuer))
