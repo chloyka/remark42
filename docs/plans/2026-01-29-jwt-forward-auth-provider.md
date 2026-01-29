@@ -56,11 +56,11 @@ The `role` field extracted from JWT claims or forward-auth headers determines ad
 - Modify: `backend/app/cmd/server.go`
 
 ### Steps
-- [ ] Add `JWTAuth` struct inside the `Auth` struct with fields: `Secret`, `Algo`, `Header`, `Issuer`, `Audience`, and mapping sub-struct (`MapID`, `MapName`, `MapEmail`, `MapPicture`, `MapRole`) with proper `long`, `env`, `default`, and `description` tags
-- [ ] Add `ForwardAuth` struct inside the `Auth` struct with fields: `Header` and mapping sub-struct (same fields as JWT mappings)
-- [ ] Verify the struct compiles and env vars parse correctly
-- [ ] Write tests: add test in `backend/app/cmd/server_test.go` that sets JWT/forward-auth config fields and verifies they are populated
-- [ ] Run `cd backend/app && go test -run TestJWT -count 1 ./cmd/` - must pass
+- [x] Add `JWTAuth` struct inside the `Auth` struct with fields: `Secret`, `Algo`, `Header`, `Issuer`, `Audience`, and mapping sub-struct (`MapID`, `MapName`, `MapEmail`, `MapPicture`, `MapRole`) with proper `long`, `env`, `default`, and `description` tags
+- [x] Add `ForwardAuth` struct inside the `Auth` struct with fields: `Header` and mapping sub-struct (same fields as JWT mappings)
+- [x] Verify the struct compiles and env vars parse correctly
+- [x] Write tests: add test in `backend/app/cmd/server_test.go` that sets JWT/forward-auth config fields and verifies they are populated
+- [x] Run `cd backend/app && go test -run TestJWT -count 1 ./cmd/` - must pass
 
 ---
 

@@ -788,6 +788,158 @@ func Test_getAllowedDomains(t *testing.T) {
 	}
 }
 
+func TestJWTAuthConfig(t *testing.T) {
+	s := ServerCommand{}
+	s.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+
+	p := flags.NewParser(&s, flags.Default)
+	args := []string{
+		"test",
+		"--auth.jwt.secret=my-secret-key",
+		"--auth.jwt.algo=RS256",
+		"--auth.jwt.header=Authorization",
+		"--auth.jwt.issuer=my-issuer",
+		"--auth.jwt.audience=my-audience",
+		"--auth.jwt.map.id=user_id",
+		"--auth.jwt.map.name=display_name",
+		"--auth.jwt.map.email=user_email",
+		"--auth.jwt.map.picture=avatar_url",
+		"--auth.jwt.map.role=user_role",
+	}
+	_, err := p.ParseArgs(args)
+	require.NoError(t, err)
+
+	assert.Equal(t, "my-secret-key", s.Auth.JWT.Secret)
+	assert.Equal(t, "RS256", s.Auth.JWT.Algo)
+	assert.Equal(t, "Authorization", s.Auth.JWT.Header)
+	assert.Equal(t, "my-issuer", s.Auth.JWT.Issuer)
+	assert.Equal(t, "my-audience", s.Auth.JWT.Audience)
+	assert.Equal(t, "user_id", s.Auth.JWT.Map.ID)
+	assert.Equal(t, "display_name", s.Auth.JWT.Map.Name)
+	assert.Equal(t, "user_email", s.Auth.JWT.Map.Email)
+	assert.Equal(t, "avatar_url", s.Auth.JWT.Map.Picture)
+	assert.Equal(t, "user_role", s.Auth.JWT.Map.Role)
+}
+
+func TestJWTAuthConfigDefaults(t *testing.T) {
+	s := ServerCommand{}
+	s.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+
+	p := flags.NewParser(&s, flags.Default)
+	_, err := p.ParseArgs([]string{"test"})
+	require.NoError(t, err)
+
+	// verify defaults
+	assert.Equal(t, "", s.Auth.JWT.Secret, "secret should be empty by default")
+	assert.Equal(t, "HS256", s.Auth.JWT.Algo, "algo should default to HS256")
+	assert.Equal(t, "X-Auth-Token", s.Auth.JWT.Header, "header should default to X-Auth-Token")
+	assert.Equal(t, "", s.Auth.JWT.Issuer, "issuer should be empty by default")
+	assert.Equal(t, "", s.Auth.JWT.Audience, "audience should be empty by default")
+	assert.Equal(t, "sub", s.Auth.JWT.Map.ID, "map.id should default to sub")
+	assert.Equal(t, "name", s.Auth.JWT.Map.Name, "map.name should default to name")
+	assert.Equal(t, "email", s.Auth.JWT.Map.Email, "map.email should default to email")
+	assert.Equal(t, "picture", s.Auth.JWT.Map.Picture, "map.picture should default to picture")
+	assert.Equal(t, "role", s.Auth.JWT.Map.Role, "map.role should default to role")
+}
+
+func TestForwardAuthConfig(t *testing.T) {
+	s := ServerCommand{}
+	s.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+
+	p := flags.NewParser(&s, flags.Default)
+	args := []string{
+		"test",
+		"--auth.forward.header=X-Forwarded-User",
+		"--auth.forward.map.id=user_id",
+		"--auth.forward.map.name=display_name",
+		"--auth.forward.map.email=user_email",
+		"--auth.forward.map.picture=avatar_url",
+		"--auth.forward.map.role=user_role",
+	}
+	_, err := p.ParseArgs(args)
+	require.NoError(t, err)
+
+	assert.Equal(t, "X-Forwarded-User", s.Auth.Forward.Header)
+	assert.Equal(t, "user_id", s.Auth.Forward.Map.ID)
+	assert.Equal(t, "display_name", s.Auth.Forward.Map.Name)
+	assert.Equal(t, "user_email", s.Auth.Forward.Map.Email)
+	assert.Equal(t, "avatar_url", s.Auth.Forward.Map.Picture)
+	assert.Equal(t, "user_role", s.Auth.Forward.Map.Role)
+}
+
+func TestForwardAuthConfigDefaults(t *testing.T) {
+	s := ServerCommand{}
+	s.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+
+	p := flags.NewParser(&s, flags.Default)
+	_, err := p.ParseArgs([]string{"test"})
+	require.NoError(t, err)
+
+	// verify defaults
+	assert.Equal(t, "", s.Auth.Forward.Header, "header should be empty by default")
+	assert.Equal(t, "sub", s.Auth.Forward.Map.ID, "map.id should default to sub")
+	assert.Equal(t, "name", s.Auth.Forward.Map.Name, "map.name should default to name")
+	assert.Equal(t, "email", s.Auth.Forward.Map.Email, "map.email should default to email")
+	assert.Equal(t, "picture", s.Auth.Forward.Map.Picture, "map.picture should default to picture")
+	assert.Equal(t, "role", s.Auth.Forward.Map.Role, "map.role should default to role")
+}
+
+func TestJWTAuthConfigEnvVars(t *testing.T) {
+	// test that env vars are correctly mapped
+	t.Setenv("AUTH_JWT_SECRET", "env-secret")
+	t.Setenv("AUTH_JWT_ALGO", "ES256")
+	t.Setenv("AUTH_JWT_HEADER", "X-Custom-Header")
+	t.Setenv("AUTH_JWT_ISSUER", "env-issuer")
+	t.Setenv("AUTH_JWT_AUDIENCE", "env-audience")
+	t.Setenv("AUTH_JWT_MAP_ID", "env_id")
+	t.Setenv("AUTH_JWT_MAP_NAME", "env_name")
+	t.Setenv("AUTH_JWT_MAP_EMAIL", "env_email")
+	t.Setenv("AUTH_JWT_MAP_PICTURE", "env_picture")
+	t.Setenv("AUTH_JWT_MAP_ROLE", "env_role")
+
+	s := ServerCommand{}
+	s.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+
+	p := flags.NewParser(&s, flags.Default)
+	_, err := p.ParseArgs([]string{"test"})
+	require.NoError(t, err)
+
+	assert.Equal(t, "env-secret", s.Auth.JWT.Secret)
+	assert.Equal(t, "ES256", s.Auth.JWT.Algo)
+	assert.Equal(t, "X-Custom-Header", s.Auth.JWT.Header)
+	assert.Equal(t, "env-issuer", s.Auth.JWT.Issuer)
+	assert.Equal(t, "env-audience", s.Auth.JWT.Audience)
+	assert.Equal(t, "env_id", s.Auth.JWT.Map.ID)
+	assert.Equal(t, "env_name", s.Auth.JWT.Map.Name)
+	assert.Equal(t, "env_email", s.Auth.JWT.Map.Email)
+	assert.Equal(t, "env_picture", s.Auth.JWT.Map.Picture)
+	assert.Equal(t, "env_role", s.Auth.JWT.Map.Role)
+}
+
+func TestForwardAuthConfigEnvVars(t *testing.T) {
+	// test that env vars are correctly mapped
+	t.Setenv("AUTH_FORWARD_HEADER", "X-Forwarded-User")
+	t.Setenv("AUTH_FORWARD_MAP_ID", "env_id")
+	t.Setenv("AUTH_FORWARD_MAP_NAME", "env_name")
+	t.Setenv("AUTH_FORWARD_MAP_EMAIL", "env_email")
+	t.Setenv("AUTH_FORWARD_MAP_PICTURE", "env_picture")
+	t.Setenv("AUTH_FORWARD_MAP_ROLE", "env_role")
+
+	s := ServerCommand{}
+	s.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+
+	p := flags.NewParser(&s, flags.Default)
+	_, err := p.ParseArgs([]string{"test"})
+	require.NoError(t, err)
+
+	assert.Equal(t, "X-Forwarded-User", s.Auth.Forward.Header)
+	assert.Equal(t, "env_id", s.Auth.Forward.Map.ID)
+	assert.Equal(t, "env_name", s.Auth.Forward.Map.Name)
+	assert.Equal(t, "env_email", s.Auth.Forward.Map.Email)
+	assert.Equal(t, "env_picture", s.Auth.Forward.Map.Picture)
+	assert.Equal(t, "env_role", s.Auth.Forward.Map.Role)
+}
+
 func chooseRandomUnusedPort() (port int) {
 	for i := 0; i < 10; i++ {
 		port = 40000 + int(rand.Int31n(10000))

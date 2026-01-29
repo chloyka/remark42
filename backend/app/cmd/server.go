@@ -108,6 +108,30 @@ type ServerCommand struct {
 		Twitter   AuthGroup  `group:"twitter" namespace:"twitter" env-namespace:"TWITTER" description:"[deprecated, doesn't work] Twitter OAuth"`
 		Patreon   AuthGroup  `group:"patreon" namespace:"patreon" env-namespace:"PATREON" description:"Patreon OAuth"`
 		Discord   AuthGroup  `group:"discord" namespace:"discord" env-namespace:"DISCORD" description:"Discord OAuth"`
+		JWT       struct {
+			Secret   string `long:"secret" env:"SECRET" description:"JWT secret (HMAC) or public key (RSA/ECDSA) to validate external JWT tokens"`
+			Algo     string `long:"algo" env:"ALGO" default:"HS256" description:"JWT signing algorithm" choice:"HS256" choice:"HS384" choice:"HS512" choice:"RS256" choice:"RS384" choice:"RS512" choice:"ES256" choice:"ES384" choice:"ES512"` //nolint
+			Header   string `long:"header" env:"HEADER" default:"X-Auth-Token" description:"HTTP header containing the JWT token"`
+			Issuer   string `long:"issuer" env:"ISSUER" description:"expected JWT issuer claim for validation"`
+			Audience string `long:"audience" env:"AUDIENCE" description:"expected JWT audience claim for validation"`
+			Map      struct {
+				ID      string `long:"id" env:"ID" default:"sub" description:"JWT claim for user ID"`
+				Name    string `long:"name" env:"NAME" default:"name" description:"JWT claim for display name"`
+				Email   string `long:"email" env:"EMAIL" default:"email" description:"JWT claim for email"`
+				Picture string `long:"picture" env:"PICTURE" default:"picture" description:"JWT claim for avatar URL"`
+				Role    string `long:"role" env:"ROLE" default:"role" description:"JWT claim for role (admin grants admin privileges)"`
+			} `group:"map" namespace:"map" env-namespace:"MAP"`
+		} `group:"jwt" namespace:"jwt" env-namespace:"JWT"`
+		Forward struct {
+			Header string `long:"header" env:"HEADER" description:"HTTP header containing decoded JWT payload as JSON (enables forward-auth mode)"`
+			Map    struct {
+				ID      string `long:"id" env:"ID" default:"sub" description:"JSON key for user ID"`
+				Name    string `long:"name" env:"NAME" default:"name" description:"JSON key for display name"`
+				Email   string `long:"email" env:"EMAIL" default:"email" description:"JSON key for email"`
+				Picture string `long:"picture" env:"PICTURE" default:"picture" description:"JSON key for avatar URL"`
+				Role    string `long:"role" env:"ROLE" default:"role" description:"JSON key for role (admin grants admin privileges)"`
+			} `group:"map" namespace:"map" env-namespace:"MAP"`
+		} `group:"forward" namespace:"forward" env-namespace:"FORWARD"`
 		Telegram  bool       `long:"telegram" env:"TELEGRAM" description:"Enable Telegram auth (using token from telegram.token)"`
 		Dev       bool       `long:"dev" env:"DEV" description:"enable dev (local) oauth2"`
 		Anonymous bool       `long:"anon" env:"ANON" description:"enable anonymous login"`
