@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -536,6 +537,413 @@ func TestPostgresDB_DeleteUserDetail(t *testing.T) {
 
 	pg.db.Model(&GormUserDetail{}).Where("site_id = ? AND user_id = ?", "radio-t", "user1").Count(&count)
 	assert.Equal(t, int64(0), count, "entry should be removed after AllUserDetails delete")
+}
+
+func TestPostgresDB_FindForPost(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// find all comments for the post
+	res, err := pg.Find(FindRequest{Locator: store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"}, Sort: "+time"})
+	require.NoError(t, err)
+	require.Equal(t, 2, len(res))
+	assert.Equal(t, "id-1", res[0].ID)
+	assert.Equal(t, "id-2", res[1].ID)
+
+	// reverse sort
+	res, err = pg.Find(FindRequest{Locator: store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"}, Sort: "-time"})
+	require.NoError(t, err)
+	require.Equal(t, 2, len(res))
+	assert.Equal(t, "id-2", res[0].ID)
+	assert.Equal(t, "id-1", res[1].ID)
+
+	// non-existent URL returns empty
+	res, err = pg.Find(FindRequest{Locator: store.Locator{URL: "https://bad-url.com", SiteID: "radio-t"}, Sort: "+time"})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(res))
+
+	// non-existent site returns empty
+	res, err = pg.Find(FindRequest{Locator: store.Locator{URL: "https://radio-t.com", SiteID: "bad-site"}, Sort: "+time"})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(res))
+}
+
+func TestPostgresDB_FindForPostSince(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// since before both comments - returns both
+	since := time.Date(2017, 12, 20, 15, 18, 21, 0, time.UTC)
+	res, err := pg.Find(FindRequest{
+		Locator: store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"},
+		Since:   since,
+		Sort:    "+time",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(res))
+
+	// since between the two comments - returns only the second
+	since = time.Date(2017, 12, 20, 15, 18, 22, 0, time.UTC)
+	res, err = pg.Find(FindRequest{
+		Locator: store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"},
+		Since:   since,
+		Sort:    "+time",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res))
+	assert.Equal(t, "id-2", res[0].ID)
+
+	// since after both comments - returns none
+	since = time.Date(2017, 12, 20, 15, 18, 24, 0, time.UTC)
+	res, err = pg.Find(FindRequest{
+		Locator: store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"},
+		Since:   since,
+		Sort:    "+time",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(res))
+}
+
+func TestPostgresDB_FindLastForSite(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// add a comment on a different post
+	c3 := store.Comment{
+		ID:        "id-3",
+		Text:      "third comment",
+		Timestamp: time.Date(2017, 12, 20, 15, 18, 25, 0, time.UTC),
+		Locator:   store.Locator{URL: "https://radio-t.com/post2", SiteID: "radio-t"},
+		User:      store.User{ID: "user2", Name: "other user"},
+	}
+	_, err := pg.Create(c3)
+	require.NoError(t, err)
+
+	// find last for site (no URL, no UserID), sorted by -time (default for site-wide)
+	res, err := pg.Find(FindRequest{Locator: store.Locator{SiteID: "radio-t"}, Sort: "-time"})
+	require.NoError(t, err)
+	require.Equal(t, 3, len(res))
+	assert.Equal(t, "id-3", res[0].ID) // most recent first
+	assert.Equal(t, "id-2", res[1].ID)
+	assert.Equal(t, "id-1", res[2].ID)
+
+	// with limit
+	res, err = pg.Find(FindRequest{Locator: store.Locator{SiteID: "radio-t"}, Limit: 2, Sort: "-time"})
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(res))
+	assert.Equal(t, "id-3", res[0].ID)
+	assert.Equal(t, "id-2", res[1].ID)
+
+	// with since filter
+	since := time.Date(2017, 12, 20, 15, 18, 23, 0, time.UTC)
+	res, err = pg.Find(FindRequest{Locator: store.Locator{SiteID: "radio-t"}, Since: since, Sort: "-time"})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res))
+	assert.Equal(t, "id-3", res[0].ID)
+
+	// deleted comments should be excluded from site-wide find
+	err = pg.Delete(DeleteRequest{
+		Locator:    store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"},
+		CommentID:  "id-1",
+		DeleteMode: store.SoftDelete,
+	})
+	require.NoError(t, err)
+
+	res, err = pg.Find(FindRequest{Locator: store.Locator{SiteID: "radio-t"}, Sort: "-time"})
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(res))
+}
+
+func TestPostgresDB_FindForUser(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// add more comments from a different user
+	c3 := store.Comment{
+		ID:        "id-3",
+		Text:      "user2 comment",
+		Timestamp: time.Date(2017, 12, 20, 15, 18, 25, 0, time.UTC),
+		Locator:   store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"},
+		User:      store.User{ID: "user2", Name: "another user"},
+	}
+	_, err := pg.Create(c3)
+	require.NoError(t, err)
+
+	// find comments for user1
+	res, err := pg.Find(FindRequest{
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user1",
+		Sort:    "+time",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, len(res))
+	assert.Equal(t, "id-1", res[0].ID)
+	assert.Equal(t, "id-2", res[1].ID)
+
+	// find comments for user2
+	res, err = pg.Find(FindRequest{
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "user2",
+		Sort:    "+time",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res))
+	assert.Equal(t, "id-3", res[0].ID)
+
+	// non-existent user returns empty
+	res, err = pg.Find(FindRequest{
+		Locator: store.Locator{SiteID: "radio-t"},
+		UserID:  "no-such-user",
+		Sort:    "+time",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(res))
+}
+
+func TestPostgresDB_FindForUserPagination(t *testing.T) {
+	dsn := getTestDSN(t)
+	pg, err := NewPostgresDB(dsn, []string{"test-site"})
+	require.NoError(t, err)
+	cleanPostgresTables(t, pg)
+	defer func() {
+		cleanPostgresTables(t, pg)
+		require.NoError(t, pg.Close())
+	}()
+
+	// create 10 comments
+	for i := 0; i < 10; i++ {
+		c := store.Comment{
+			ID:        fmt.Sprintf("id-%d", i),
+			Text:      fmt.Sprintf("text %d", i),
+			Timestamp: time.Date(2017, 12, 20, 15, 18, 22+i, 0, time.UTC),
+			Locator:   store.Locator{URL: "https://example.com", SiteID: "test-site"},
+			User:      store.User{ID: "user1", Name: "test"},
+		}
+		_, err = pg.Create(c)
+		require.NoError(t, err)
+	}
+
+	// find with limit 3, skip 0
+	res, err := pg.Find(FindRequest{
+		Locator: store.Locator{SiteID: "test-site"},
+		UserID:  "user1",
+		Limit:   3,
+		Sort:    "-time",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, len(res))
+	assert.Equal(t, "id-9", res[0].ID)
+	assert.Equal(t, "id-8", res[1].ID)
+	assert.Equal(t, "id-7", res[2].ID)
+
+	// find with limit 3, skip 3
+	res, err = pg.Find(FindRequest{
+		Locator: store.Locator{SiteID: "test-site"},
+		UserID:  "user1",
+		Limit:   3,
+		Skip:    3,
+		Sort:    "-time",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, len(res))
+	assert.Equal(t, "id-6", res[0].ID)
+	assert.Equal(t, "id-5", res[1].ID)
+	assert.Equal(t, "id-4", res[2].ID)
+
+	// skip beyond total
+	res, err = pg.Find(FindRequest{
+		Locator: store.Locator{SiteID: "test-site"},
+		UserID:  "user1",
+		Limit:   3,
+		Skip:    20,
+		Sort:    "-time",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(res))
+}
+
+func TestPostgresDB_FindSortByScore(t *testing.T) {
+	dsn := getTestDSN(t)
+	pg, err := NewPostgresDB(dsn, []string{"test-site"})
+	require.NoError(t, err)
+	cleanPostgresTables(t, pg)
+	defer func() {
+		cleanPostgresTables(t, pg)
+		require.NoError(t, pg.Close())
+	}()
+
+	comments := []store.Comment{
+		{ID: "s1", Text: "low score", Score: 1, Timestamp: time.Date(2017, 12, 20, 15, 18, 22, 0, time.UTC),
+			Locator: store.Locator{URL: "https://example.com", SiteID: "test-site"}, User: store.User{ID: "u1", Name: "t"}},
+		{ID: "s2", Text: "high score", Score: 10, Timestamp: time.Date(2017, 12, 20, 15, 18, 23, 0, time.UTC),
+			Locator: store.Locator{URL: "https://example.com", SiteID: "test-site"}, User: store.User{ID: "u1", Name: "t"}},
+		{ID: "s3", Text: "mid score", Score: 5, Timestamp: time.Date(2017, 12, 20, 15, 18, 24, 0, time.UTC),
+			Locator: store.Locator{URL: "https://example.com", SiteID: "test-site"}, User: store.User{ID: "u1", Name: "t"}},
+	}
+	for _, c := range comments {
+		_, err = pg.Create(c)
+		require.NoError(t, err)
+	}
+
+	// sort by +score (ascending)
+	res, err := pg.Find(FindRequest{
+		Locator: store.Locator{URL: "https://example.com", SiteID: "test-site"},
+		Sort:    "+score",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, len(res))
+	assert.Equal(t, "s1", res[0].ID) // score 1
+	assert.Equal(t, "s3", res[1].ID) // score 5
+	assert.Equal(t, "s2", res[2].ID) // score 10
+
+	// sort by -score (descending)
+	res, err = pg.Find(FindRequest{
+		Locator: store.Locator{URL: "https://example.com", SiteID: "test-site"},
+		Sort:    "-score",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, len(res))
+	assert.Equal(t, "s2", res[0].ID) // score 10
+	assert.Equal(t, "s3", res[1].ID) // score 5
+	assert.Equal(t, "s1", res[2].ID) // score 1
+}
+
+func TestPostgresDB_CountPost(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// count for existing post
+	count, err := pg.Count(FindRequest{Locator: store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"}})
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+
+	// count for non-existent URL
+	count, err = pg.Count(FindRequest{Locator: store.Locator{URL: "https://no-such-url.com", SiteID: "radio-t"}})
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	// count after soft delete
+	err = pg.Delete(DeleteRequest{
+		Locator:    store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"},
+		CommentID:  "id-1",
+		DeleteMode: store.SoftDelete,
+	})
+	require.NoError(t, err)
+	count, err = pg.Count(FindRequest{Locator: store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"}})
+	require.NoError(t, err)
+	assert.Equal(t, 1, count, "soft deleted comment should not be counted")
+}
+
+func TestPostgresDB_CountUser(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// count for existing user
+	count, err := pg.Count(FindRequest{Locator: store.Locator{SiteID: "radio-t"}, UserID: "user1"})
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+
+	// count for non-existent user
+	count, err = pg.Count(FindRequest{Locator: store.Locator{SiteID: "radio-t"}, UserID: "no-user"})
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	// invalid request
+	_, err = pg.Count(FindRequest{Locator: store.Locator{SiteID: "radio-t"}})
+	assert.Error(t, err)
+}
+
+func TestPostgresDB_InfoPost(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// get info for existing post
+	infos, err := pg.Info(InfoRequest{Locator: store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"}})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(infos))
+	assert.Equal(t, "https://radio-t.com", infos[0].URL)
+	assert.Equal(t, 2, infos[0].Count)
+	assert.False(t, infos[0].ReadOnly)
+	assert.False(t, infos[0].FirstTS.IsZero())
+	assert.False(t, infos[0].LastTS.IsZero())
+
+	// info for non-existent post
+	_, err = pg.Info(InfoRequest{Locator: store.Locator{URL: "https://bad-url.com", SiteID: "radio-t"}})
+	assert.Error(t, err)
+}
+
+func TestPostgresDB_InfoPostReadOnly(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// test ReadOnlyAge: posts from 2017 should be read-only with a small ReadOnlyAge
+	infos, err := pg.Info(InfoRequest{
+		Locator:     store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"},
+		ReadOnlyAge: 1, // 1 day — old posts should be read-only
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(infos))
+	assert.True(t, infos[0].ReadOnly, "old post should be read-only with ReadOnlyAge=1")
+
+	// without ReadOnlyAge, should not be read-only
+	infos, err = pg.Info(InfoRequest{
+		Locator: store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(infos))
+	assert.False(t, infos[0].ReadOnly)
+
+	// manually set read-only flag
+	err = pg.db.Create(&GormReadOnlyPost{SiteID: "radio-t", URL: "https://radio-t.com"}).Error
+	require.NoError(t, err)
+
+	infos, err = pg.Info(InfoRequest{
+		Locator: store.Locator{URL: "https://radio-t.com", SiteID: "radio-t"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(infos))
+	assert.True(t, infos[0].ReadOnly, "manually flagged post should be read-only")
+}
+
+func TestPostgresDB_InfoList(t *testing.T) {
+	pg, teardown := prepPostgres(t)
+	defer teardown()
+
+	// add comments to a second post
+	c3 := store.Comment{
+		ID:        "id-3",
+		Text:      "post2 comment",
+		Timestamp: time.Date(2017, 12, 21, 10, 0, 0, 0, time.UTC),
+		Locator:   store.Locator{URL: "https://radio-t.com/post2", SiteID: "radio-t"},
+		User:      store.User{ID: "user2", Name: "another"},
+	}
+	_, err := pg.Create(c3)
+	require.NoError(t, err)
+
+	// list all post infos for site
+	infos, err := pg.Info(InfoRequest{Locator: store.Locator{SiteID: "radio-t"}})
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(infos))
+
+	// with limit
+	infos, err = pg.Info(InfoRequest{Locator: store.Locator{SiteID: "radio-t"}, Limit: 1})
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(infos))
+
+	// with skip
+	infos, err = pg.Info(InfoRequest{Locator: store.Locator{SiteID: "radio-t"}, Skip: 1})
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(infos))
+
+	// skip beyond total
+	infos, err = pg.Info(InfoRequest{Locator: store.Locator{SiteID: "radio-t"}, Skip: 10})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(infos))
+
+	// non-existent site
+	infos, err = pg.Info(InfoRequest{Locator: store.Locator{SiteID: "bad-site"}})
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(infos))
 }
 
 func TestPostgresDB_CreateWithVotesAndEdit(t *testing.T) {

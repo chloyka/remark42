@@ -291,21 +291,170 @@ func (p *PostgresDB) isReadOnly(locator store.Locator) bool {
 	return count > 0
 }
 
-// placeholder methods to be implemented in later tasks
+// Find returns comments matching the request.
+// Supports finding by post (URL+SiteID), by user (UserID+SiteID), or last N comments for site.
+func (p *PostgresDB) Find(req FindRequest) ([]store.Comment, error) {
+	comments := []store.Comment{}
 
-// Find returns comments matching the request
-func (p *PostgresDB) Find(_ FindRequest) ([]store.Comment, error) {
-	return nil, fmt.Errorf("not implemented")
+	switch {
+	case req.Locator.SiteID != "" && req.Locator.URL != "": // find post comments
+		comments = p.findForPost(req)
+	case req.Locator.SiteID != "" && req.UserID != "": // find comments for user
+		var err error
+		comments, err = p.findForUser(req)
+		if err != nil {
+			return nil, err
+		}
+	case req.Locator.SiteID != "" && req.Locator.URL == "" && req.UserID == "": // find last comments for site
+		comments = p.findLastForSite(req)
+	}
+
+	return SortComments(comments, req.Sort), nil
 }
 
-// Info returns post info
-func (p *PostgresDB) Info(_ InfoRequest) ([]store.PostInfo, error) {
-	return nil, fmt.Errorf("not implemented")
+// findForPost retrieves all comments for a specific post, optionally filtering by Since.
+func (p *PostgresDB) findForPost(req FindRequest) []store.Comment {
+	var gormComments []GormComment
+	query := p.db.Where("site_id = ? AND url = ?", req.Locator.SiteID, req.Locator.URL)
+	if !req.Since.IsZero() {
+		query = query.Where("timestamp > ?", req.Since)
+	}
+	query.Find(&gormComments)
+
+	comments := make([]store.Comment, 0, len(gormComments))
+	for _, gc := range gormComments {
+		comments = append(comments, gc.ToComment())
+	}
+	return comments
 }
 
-// Count returns comment count
-func (p *PostgresDB) Count(_ FindRequest) (int, error) {
-	return 0, fmt.Errorf("not implemented")
+// findForUser retrieves comments by user for a site, with limit and skip.
+func (p *PostgresDB) findForUser(req FindRequest) ([]store.Comment, error) {
+	limit := req.Limit
+	if limit == 0 || limit > userLimit {
+		limit = userLimit
+	}
+
+	var gormComments []GormComment
+	query := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).
+		Order("timestamp DESC")
+	if req.Skip > 0 {
+		query = query.Offset(req.Skip)
+	}
+	query = query.Limit(limit)
+	if err := query.Find(&gormComments).Error; err != nil {
+		return nil, fmt.Errorf("failed to find comments for user %s: %w", req.UserID, err)
+	}
+
+	comments := make([]store.Comment, 0, len(gormComments))
+	for _, gc := range gormComments {
+		comments = append(comments, gc.ToComment())
+	}
+	return comments, nil
+}
+
+// findLastForSite retrieves last N comments for a site, excluding deleted, optionally filtering by Since.
+func (p *PostgresDB) findLastForSite(req FindRequest) []store.Comment {
+	limit := req.Limit
+	if limit == 0 || limit > lastLimit {
+		limit = lastLimit
+	}
+
+	var gormComments []GormComment
+	query := p.db.Where("site_id = ? AND deleted = ?", req.Locator.SiteID, false).
+		Order("timestamp DESC")
+	if !req.Since.IsZero() {
+		query = query.Where("timestamp > ?", req.Since)
+	}
+	query = query.Limit(limit)
+	query.Find(&gormComments)
+
+	comments := make([]store.Comment, 0, len(gormComments))
+	for _, gc := range gormComments {
+		comments = append(comments, gc.ToComment())
+	}
+	return comments
+}
+
+// Count returns the number of comments matching the find criteria.
+func (p *PostgresDB) Count(req FindRequest) (int, error) {
+	var count int64
+
+	switch {
+	case req.Locator.URL != "": // count for post
+		if err := p.db.Model(&GormComment{}).
+			Where("site_id = ? AND url = ? AND deleted = ?", req.Locator.SiteID, req.Locator.URL, false).
+			Count(&count).Error; err != nil {
+			return 0, fmt.Errorf("failed to count comments for post: %w", err)
+		}
+		return int(count), nil
+	case req.UserID != "": // count for user
+		if err := p.db.Model(&GormComment{}).
+			Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).
+			Count(&count).Error; err != nil {
+			return 0, fmt.Errorf("failed to count comments for user: %w", err)
+		}
+		return int(count), nil
+	}
+
+	return 0, fmt.Errorf("invalid count request %+v", req)
+}
+
+// Info returns post metadata. If URL is set, returns info for a single post.
+// If only SiteID is set, returns info for all posts with Limit/Skip pagination.
+func (p *PostgresDB) Info(req InfoRequest) ([]store.PostInfo, error) {
+	if req.Locator.URL != "" { // single post info
+		return p.infoForPost(req)
+	}
+	if req.Locator.SiteID != "" { // all posts for site
+		return p.infoForSite(req)
+	}
+	return nil, fmt.Errorf("invalid info request %+v", req)
+}
+
+// infoForPost returns info for a single post.
+func (p *PostgresDB) infoForPost(req InfoRequest) ([]store.PostInfo, error) {
+	var gpi GormPostInfo
+	result := p.db.Where("site_id = ? AND url = ?", req.Locator.SiteID, req.Locator.URL).First(&gpi)
+	if result.Error != nil {
+		return nil, fmt.Errorf("can't load info for %s: %w", req.Locator.URL, result.Error)
+	}
+
+	info := gpi.ToPostInfo()
+
+	// set read-only from age
+	if req.ReadOnlyAge > 0 && !info.FirstTS.IsZero() &&
+		info.FirstTS.AddDate(0, 0, req.ReadOnlyAge).Before(time.Now()) {
+		info.ReadOnly = true
+	}
+
+	// also check manual read-only flag
+	if !info.ReadOnly && p.isReadOnly(req.Locator) {
+		info.ReadOnly = true
+	}
+
+	return []store.PostInfo{info}, nil
+}
+
+// infoForSite returns info for all posts of a site with pagination.
+func (p *PostgresDB) infoForSite(req InfoRequest) ([]store.PostInfo, error) {
+	var gormInfos []GormPostInfo
+	query := p.db.Where("site_id = ?", req.Locator.SiteID).Order("last_ts DESC")
+	if req.Skip > 0 {
+		query = query.Offset(req.Skip)
+	}
+	if req.Limit > 0 {
+		query = query.Limit(req.Limit)
+	}
+	if err := query.Find(&gormInfos).Error; err != nil {
+		return nil, fmt.Errorf("failed to list post info for site %s: %w", req.Locator.SiteID, err)
+	}
+
+	result := make([]store.PostInfo, 0, len(gormInfos))
+	for i := range gormInfos {
+		result = append(result, gormInfos[i].ToPostInfo())
+	}
+	return result, nil
 }
 
 // Flag gets or sets flag values

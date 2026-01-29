@@ -86,20 +86,20 @@ Implement a new storage engine backed by PostgreSQL via GORM, as an alternative 
 **Files:**
 - Modify: `backend/app/store/engine/postgres.go`
 
-- [ ] Implement `Find(req FindRequest) ([]store.Comment, error)`:
+- [x] Implement `Find(req FindRequest) ([]store.Comment, error)`:
   - If `req.Locator.URL` is set: find comments for that post
   - If `req.UserID` is set: find comments by user across site
   - If only `req.Locator.SiteID` is set (no URL, no UserID): find last N comments across site
   - Apply `Sort`, `Since`, `Limit`, `Skip`
   - Sort mapping: `+time`/`-time` -> `timestamp ASC/DESC`, `+score`/`-score` -> `score ASC/DESC`, `+controversy`/`-controversy` -> `controversy ASC/DESC`
-- [ ] Implement `Count(req FindRequest) (int, error)`:
+- [x] Implement `Count(req FindRequest) (int, error)`:
   - Count comments matching the find criteria
-- [ ] Implement `Info(req InfoRequest) ([]store.PostInfo, error)`:
+- [x] Implement `Info(req InfoRequest) ([]store.PostInfo, error)`:
   - If URL is set: return single post info
   - If only SiteID: return all post infos for site with `Limit`/`Skip`
   - Apply `ReadOnlyAge` if set (posts older than N days become read-only)
-- [ ] Write tests for Find (by post, by user, by site, with sort/limit/skip), Count, Info
-- [ ] Run `cd backend/app/store/engine && go test -run TestPostgresDB -count 1 ./...` — must pass before task 5
+- [x] Write tests for Find (by post, by user, by site, with sort/limit/skip), Count, Info
+- [x] Run `cd backend/app/store/engine && go test -run TestPostgresDB -count 1 ./...` — must pass before task 5
 
 ## Task 5: Implement Flag, ListFlags, UserDetail methods
 
