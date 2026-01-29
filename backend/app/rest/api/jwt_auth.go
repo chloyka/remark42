@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -13,6 +14,11 @@ import (
 
 	"github.com/go-pkgz/auth/v2/token"
 )
+
+// externalAuthKey is a context key used to signal that external auth middleware has already authenticated the request.
+type externalAuthContextKey string
+
+const externalAuthDoneKey externalAuthContextKey = "external-auth-done"
 
 // FieldMappings defines how external JWT claims or JSON keys map to user fields
 type FieldMappings struct {
@@ -82,6 +88,9 @@ func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) (fu
 				return
 			}
 
+			// strip the external JWT header to prevent leaking token downstream
+			r.Header.Del(cfg.Header)
+
 			tok, err := parser.Parse(tokenStr, keyFunc)
 			if err != nil || !tok.Valid {
 				log.Printf("[WARN] JWT auth: invalid token, %v", err)
@@ -112,6 +121,8 @@ func JWTAuthMiddleware(cfg JWTAuthConfig, tokenCreator internalTokenCreator) (fu
 				// otherwise the downstream auth middleware sets it from the internal token
 				r = token.SetUserInfo(r, user)
 			}
+			// mark request as externally authenticated so forward-auth middleware skips it
+			r = r.WithContext(context.WithValue(r.Context(), externalAuthDoneKey, true))
 			next.ServeHTTP(w, r)
 		})
 	}, nil
@@ -124,7 +135,7 @@ func ForwardAuthMiddleware(cfg ForwardAuthConfig, tokenCreator internalTokenCrea
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// skip if the request was already authenticated by another external auth middleware (e.g., JWT)
-			if r.Header.Get("X-JWT") != "" {
+			if r.Context().Value(externalAuthDoneKey) != nil {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -222,7 +233,7 @@ func extractUser(claims map[string]interface{}, m FieldMappings, prefix string) 
 // Numeric values (float64 from JSON) are formatted without scientific notation.
 func claimStr(claims map[string]interface{}, key string) string {
 	v, ok := claims[key]
-	if !ok {
+	if !ok || v == nil {
 		return ""
 	}
 	switch val := v.(type) {
