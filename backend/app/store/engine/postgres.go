@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -265,8 +266,10 @@ func (p *PostgresDB) deleteUserDetail(siteID, userID string, detail UserDetail) 
 	var entry GormUserDetail
 	result := p.db.Where("site_id = ? AND user_id = ?", siteID, userID).First(&entry)
 	if result.Error != nil {
-		// no entry to delete
-		return nil
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil // no entry to delete
+		}
+		return fmt.Errorf("failed to load user detail for deletion: %w", result.Error)
 	}
 
 	switch detail {
@@ -504,7 +507,7 @@ func (p *PostgresDB) checkFlag(req FlagRequest) (bool, error) {
 		var bu GormBlockedUser
 		result := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).First(&bu)
 		if result.Error != nil {
-			if result.Error == gorm.ErrRecordNotFound {
+			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 				return false, nil
 			}
 			return false, fmt.Errorf("failed to check blocked flag: %w", result.Error)
@@ -660,8 +663,10 @@ func (p *PostgresDB) getUserDetail(req UserDetailRequest) ([]UserDetailEntry, er
 	var entry GormUserDetail
 	result := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).First(&entry)
 	if result.Error != nil {
-		// no entry found — return empty result (not an error, matching BoltDB behavior)
-		return nil, nil
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil // no entry found — return empty result (matching BoltDB behavior)
+		}
+		return nil, fmt.Errorf("failed to load user detail: %w", result.Error)
 	}
 
 	switch req.Detail {
@@ -677,8 +682,13 @@ func (p *PostgresDB) getUserDetail(req UserDetailRequest) ([]UserDetailEntry, er
 func (p *PostgresDB) setUserDetail(req UserDetailRequest) ([]UserDetailEntry, error) {
 	var entry GormUserDetail
 	result := p.db.Where("site_id = ? AND user_id = ?", req.Locator.SiteID, req.UserID).First(&entry)
+	isNew := false
 	if result.Error != nil {
+		if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("failed to lookup user detail: %w", result.Error)
+		}
 		// create new entry
+		isNew = true
 		entry = GormUserDetail{
 			SiteID: req.Locator.SiteID,
 			UserID: req.UserID,
@@ -692,7 +702,7 @@ func (p *PostgresDB) setUserDetail(req UserDetailRequest) ([]UserDetailEntry, er
 		entry.Telegram = req.Update
 	}
 
-	if result.Error != nil {
+	if isNew {
 		// new entry — create
 		if err := p.db.Create(&entry).Error; err != nil {
 			return nil, fmt.Errorf("failed to create user detail: %w", err)
